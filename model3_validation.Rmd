@@ -1,0 +1,397 @@
+---
+title: "Soccer3.0_test"
+output: html_document
+date: "2025-01-30"
+---
+
+```{r setup, include=FALSE}
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(socR)
+library(gtsummary)
+library(gt)
+library(kableExtra)
+```
+
+# Data Inputs
+## Coder
+```{r}
+usr_coder <- read_coder_file('/Users/orszagl2/Documents/socR/usr_coder.csv')
+lymph_coder <- read_coder_file("/Users/orszagl2/Documents/socR/asia_lymph_coder.csv")
+atp_coder <- read_coder_file("/Users/orszagl2/Documents/socR/atp500_coder.csv")
+```
+
+## No Crosswalk
+```{r, warning = FALSE}
+usr_no_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model3.0/usr_no_xw.xlsx")
+lymph_no_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model3.0/lymph_no_xw.xlsx")
+atp_no_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model3.0/atp_no_xw.xlsx")
+```
+
+## Crosswalk
+```{r}
+usr_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model3.0/usr_xw.xlsx")
+lymph_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model3.0/lymph_xw.xlsx")
+atp_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model3.0/atp_xw.xlsx")
+```
+
+# Agreement
+```{r}
+# USR
+usr_cmp <- rank(usr_no_crosswalk, usr_coder)
+usr_cmp_crosswalk <- rank(usr_crosswalk, usr_coder)
+# ATP
+atp_cmp <- rank(atp_no_crosswalk, atp_coder)
+atp_cmp_crosswalk <- rank(atp_crosswalk, atp_coder)
+# Lymph
+lymph_cmp <- rank(lymph_no_crosswalk, lymph_coder)
+lymph_cmp_crosswalk <- rank(lymph_crosswalk, lymph_coder)
+```
+
+# Full Datasets (X-walk Joined with Non-Xwalk & # of scores)
+## Crosswalks
+```{r read in xwalks}
+xwalk_lymph = read.csv('/Users/orszagl2/Documents/socR/crosswalk files/isco1988_soc2010.csv')
+xwalk_lymph = xwalk(xwalk_lymph)
+xwalk_usr = read.csv('/Users/orszagl2/Documents/socR/crosswalk files/soc1980_soc2010.csv')
+xwalk_usr = xwalk(xwalk_usr)
+xwalk_atp = read.csv('/Users/orszagl2/Documents/socR/crosswalk files/noc2011_soc2010_via_soc2018.csv')
+xwalk_atp = xwalk(xwalk_atp)
+```
+
+
+## Xwalked Numbers
+```{r warning = FALSE}
+usr_xwalk_num = xwalk_num(usr_crosswalk, xwalk_usr, 'soc1980')
+lymph_xwalk_num = xwalk_num(lymph_crosswalk, xwalk_lymph, 'isco1988')
+atp_xwalk_num = xwalk_num(atp_crosswalk, xwalk_atp, 'noc2011')
+```
+
+## Join Xwalk & Non-Xwalk
+```{r}
+usr_xwalk_num = inner_join(usr_xwalk_num, usr_cmp_crosswalk, by = "Id")
+usr_full = inner_join(select(usr_xwalk_num, c(numcros, hi_score, Id, rank)), select(usr_cmp, c(hi_score, Id, rank)), by = "Id", suffix = c(".xw", ".no_xw"))
+atp_xwalk_num = inner_join(atp_xwalk_num, atp_cmp_crosswalk, by = "Id")
+atp_full = inner_join(select(atp_xwalk_num, c(numcros, hi_score, Id, rank)), select(atp_cmp, c(hi_score, Id, rank)), by = "Id", suffix = c(".xw", ".no_xw"))
+lymph_xwalk_num = inner_join(lymph_xwalk_num, lymph_cmp_crosswalk, by = "Id")
+lymph_full = inner_join(select(lymph_xwalk_num, c(numcros, hi_score, Id, rank)), select(lymph_cmp, c(hi_score, Id, rank)), by = "Id", suffix = c(".xw", ".no_xw"))
+```
+
+
+# Graph
+```{r}
+# Set up summary dataframe
+df_summary = data.frame(
+  interval = levels(cut(seq(0, 1, length.out = 100), 
+                        breaks = seq(0, 1, length.out = 11), 
+                        include.lowest = TRUE)))
+```
+
+```{r}
+df_summary2 = data.frame(
+  interval = levels(cut(seq(0, 1, length.out = 100), 
+                        breaks = seq(0, 1, length.out = 21), 
+                        include.lowest = TRUE)))
+```
+
+```{r}
+df_summary2$usr_no_x <- summarize_df(usr_cmp, 21, "usr_no_x")
+df_summary2$usr_x <- summarize_df(usr_cmp_crosswalk, 21, "usr_x")
+df_summary$atp_no_x <- summarize_df(atp_cmp, 11, "atp_no_x")
+df_summary$atp_x <- summarize_df(atp_cmp_crosswalk, 11, "atp_x")
+df_summary$lymph_no_x <- summarize_df(lymph_cmp, 11, "lymph_no_x")
+df_summary$lymph_x <- summarize_df(lymph_cmp_crosswalk, 11, "lymph_x")
+```
+
+```{r}
+df_summary$start_value = as.numeric(sub("\\((.+),.+\\]", "\\1", as.character(df_summary$interval)))
+df_summary2$start_value = as.numeric(sub("\\((.+),.+\\]", "\\1", as.character(df_summary2$interval)))
+df_summary$start_value = replace_na(df_summary$start_value, 0)
+df_summary2$start_value = replace_na(df_summary2$start_value, 0)
+```
+
+```{r, warning = FALSE}
+df_summary3 = full_join(df_summary, select(df_summary2, - interval), by = "start_value")
+df_long <- pivot_data_long(df_summary3)
+faceted_comp_plot(df_long)
+```
+
+# Graph
+```{r}
+# Set up summary dataframe
+df_summary3 = data.frame(
+  interval = levels(cut(seq(0, 1, length.out = 100), 
+                        breaks = seq(0, 1, length.out = 21), 
+                        include.lowest = TRUE)))
+```
+
+```{r}
+df_summary4 = data.frame(
+  interval = levels(cut(seq(0, 1, length.out = 100), 
+                        breaks = seq(0, 1, length.out = 11), 
+                        include.lowest = TRUE)))
+```
+
+```{r}
+df_summary3$usr_no_x <- summarize_df_weighted(usr_cmp, 21, "usr_no_x", "usr_no_x_pct")
+df_summary3$usr_x <- summarize_df_weighted(usr_cmp_crosswalk, 21, "usr_x", "usr_x_pct")
+df_summary4$atp_no_x <- summarize_df_weighted(atp_cmp, 11, "atp_no_x", "atp_no_x_pct")
+df_summary4$atp_x <- summarize_df_weighted(atp_cmp_crosswalk, 11, "atp_x", "atp_x_pct")
+df_summary4$lymph_no_x <- summarize_df_weighted(lymph_cmp, 11, "lymph_no_x", "lymph_no_x_pct")
+df_summary4$lymph_x <- summarize_df_weighted(lymph_cmp_crosswalk, 11, "lymph_x", "lymph_x_pct")
+```
+
+```{r}
+df_summary3$start_value = as.numeric(sub("\\((.+),.+\\]", "\\1", as.character(df_summary3$interval)))
+df_summary4$start_value = as.numeric(sub("\\((.+),.+\\]", "\\1", as.character(df_summary4$interval)))
+df_summary3$start_value = replace_na(df_summary3$start_value, 0)
+df_summary4$start_value = replace_na(df_summary4$start_value, 0)
+```
+
+```{r, warning = FALSE}
+df_summary5 = full_join(df_summary4, select(df_summary3, - interval), by = "start_value")
+df_long <- pivot_data_long(df_summary5)
+faceted_comp_plot_wt(df_long)
+```
+
+```{r}
+df_summary$start_value = as.numeric(sub("\\((.+),.+\\]", "\\1", as.character(df_summary$interval)))
+df_summary$start_value[1] = 0
+```
+
+```{r}
+colors <- c("Asia Lymph" = "dodgerblue2", "ATP" = "maroon", "USR" = "turquoise")
+
+ggplot(df_summary5)+
+  geom_point(aes(x = start_value, y = lymph_x$colname, color = "Asia Lymph"))+
+  geom_point(aes(x = start_value, y = atp_x$colname, color = "ATP"))+
+  geom_point(aes(x = start_value, y = usr_x$colname, color = "USR"))+
+  geom_smooth(aes(x = start_value, y = lymph_x$colname,  color = "Asia Lymph"), method = "lm", se = FALSE)+
+  geom_smooth(aes(x = start_value, y = atp_x$colname, color = "ATP"), method = "lm",  se = FALSE)+
+  geom_smooth(aes(x = start_value, y = usr_x$colname, color = "USR"), method = "lm",  se = FALSE)+
+  scale_y_continuous(limits = c(0,1))+
+  scale_x_continuous(limits = c(0,1))+
+  labs (x = "Score",
+        y = "% agreement",
+        title = "Score vs. % Agreement with Xwalk",
+        color = "Legend")+
+  scale_color_manual(values = colors)
+```
+
+# Faceted Line Graphs
+```{r}
+# Set up summary dataframe
+usr_summary = data.frame(
+  interval = levels(cut(seq(0, 1, length.out = 100), 
+                        breaks = seq(0, 1, length.out = 21), 
+                        include.lowest = TRUE)))
+```
+
+```{r, warning = FALSE}
+usr_summary <- usr_full %>%
+  mutate(
+    interval = cut(hi_score, breaks = seq(0, 1, length.out = 21), include.lowest = TRUE) # Create intervals
+  ) %>%
+  group_by(interval, score_bin_diff) %>% # Group by interval
+  summarize(avg = mean(rank == 1))
+```
+
+```{r}
+supp.labs = c(
+  "Change greater than -.20",
+  "Change between -.20 and -.05",
+  "Change between -.05 and .05",
+  "Change between .05 and .20",
+  "Change greater than .20"
+)
+names(supp.labs) = c("--", "-", "No change", "+", "++")
+```
+
+```{r}
+ggplot(usr_summary, aes(x = interval, y = avg))+
+  geom_point()+
+  facet_wrap(~score_bin_diff, labeller = labeller(score_bin_diff = supp.labs))+
+  geom_smooth(aes(group = score_bin_diff), method = 'lm', color = "cornflowerblue", se = FALSE)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5))+
+  labs (x = "Highest Soccer Score with Crosswalk", 
+        y = "Percent Agreement with Expert Code",
+        title = "USR Highest Soccer Score vs. Pct Agreement, Stratified by Score Change")
+```
+
+## ATP
+```{r}
+# Set up summary dataframe
+atp_summary = data.frame(
+  interval = levels(cut(seq(0, 1, length.out = 100), 
+                        breaks = seq(0, 1, length.out = 21), 
+                        include.lowest = TRUE)))
+```
+
+```{r, warning = FALSE}
+atp_summary <- atp_full %>%
+  mutate(
+    interval = cut(hi_score, breaks = seq(0, 1, length.out = 21), include.lowest = TRUE) # Create intervals
+  ) %>%
+  group_by(interval, score_bin_diff) %>% # Group by interval
+  summarize(avg = mean(rank == 1))
+```
+
+```{r}
+ggplot(atp_summary, aes(x = interval, y = avg))+
+  geom_point()+
+  facet_wrap(~score_bin_diff, labeller = labeller(score_bin_diff = supp.labs))+
+  geom_smooth(aes(group = score_bin_diff), method = 'lm', color = "purple4", se = FALSE)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5))+
+  labs (x = "Highest Soccer Score with Crosswalk", 
+        y = "Percent Agreement with Expert Code",
+        title = "USR Highest Soccer Score vs. Pct Agreement, Stratified by Score Change")
+```
+
+## Asia Lymph
+```{r}
+# Set up summary dataframe
+lymph_summary = data.frame(
+  interval = levels(cut(seq(0, 1, length.out = 100), 
+                        breaks = seq(0, 1, length.out = 11), 
+                        include.lowest = TRUE)))
+```
+
+```{r, warning = FALSE}
+lymph_summary <- lymph_full %>%
+  mutate(
+    interval = cut(hi_score, breaks = seq(0, 1, length.out = 11), include.lowest = TRUE) # Create intervals
+  ) %>%
+  group_by(interval, score_bin_diff) %>% # Group by interval
+  summarize(avg = mean(rank == 1))
+```
+
+```{r}
+ggplot(lymph_summary, aes(x = interval, y = avg))+
+  geom_point()+
+  facet_wrap(~score_bin_diff, labeller = labeller(score_bin_diff = supp.labs))+
+  geom_smooth(aes(group = score_bin_diff), method = 'lm', color = "turquoise4", se = FALSE)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5))+
+  labs (x = "Highest Soccer Score with Crosswalk", 
+        y = "Percent Agreement with Expert Code",
+        title = "USR Highest Soccer Score vs. Pct Agreement, Stratified by Score Change")
+```
+
+# Asia Lymph by # of ISCO Scores
+```{r}
+summary_lymph = {
+  lymph_full2 %>%
+    mutate(
+      interval = cut(hi_score, breaks = seq(0, 1, length.out = 11), include.lowest = TRUE) # Create intervals
+    ) %>%
+    group_by(interval, numcros) %>% # Group by interval
+    summarize(score = mean(rank == 1), .groups = 'keep')
+}
+```
+
+```{r}
+ggplot(summary_lymph, aes(x = interval, y = score))+
+  geom_point()+
+  geom_smooth(aes(group = numcros), se = FALSE, method = "lm", inherit.aes = TRUE)+
+  facet_wrap(~numcros)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5))+
+  labs (x = "score",
+        y = "% agreement",
+        title = "Lymph Score vs. % Agreement by # of Xwalked Scores")
+```
+
+```{r}
+lymph_large = summary_lymph%>%filter (numcros == ">5")
+lymph_med = summary_lymph%>%filter (numcros == "4" | numcros == "3" | numcros == "2")
+lymph_small = summary_lymph%>%filter (numcros == "1")
+```
+
+```{r}
+lymph_sum2 = df_summary[, c(1,4,5)]
+lymph_sum2 <- inner_join(lymph_sum2, select(lymph_large, -numcros), by = "interval") %>% 
+  select(-numcros)
+lymph_sum2 <- inner_join(lymph_sum2, select(lymph_med, -numcros), by = "interval") %>% 
+  select(-numcros)
+lymph_sum2 <- inner_join(lymph_sum2, select(lymph_small, -numcros), by = "interval") %>% 
+   select(-numcros)
+lymph_sum2long <- { lymph_sum2 %>%
+    pivot_longer(
+      cols = -c(interval),               # Columns to pivot (all except 'interval')
+      names_to = "group",             # New column for variable names
+      values_to = "value")%>%
+    mutate(start_value = as.numeric(sub("\\((.+),.+\\]", "\\1", as.character(interval))))}
+lymph_sum2long$start_value = replace_na(lymph_sum2long$start_value, 0)
+ggplot(lymph_sum2long, aes(x = start_value, y = value, color = group))+
+  geom_point()+
+  geom_smooth(aes(group = group), se = FALSE, method = "lm", inherit.aes = TRUE)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5))+
+  scale_color_manual(labels = c("lymph_no_x" = "No Crosswalk", "lymph_x" = "Crosswalk", "score.x" = "Crosswalk, >5 Xwalked Scores", "score.y" = "2-4 Xwalked Scores", "score" = "1 Xwalked Score"), values = c("deeppink3","cornflowerblue", "aquamarine3", "mediumpurple3", "red4"))+
+  scale_y_continuous(limits = c(0,1))+
+  labs(x = "Soccer Score", 
+       y = "% Agreement",
+       title = "Asia Lymph Score vs. % Agreement")
+```
+
+# Crosswalk vs. Non-crosswalk Scores
+##Lymph
+```{r}
+ggplot(lymph_full, aes(y = hi_score.xw, x = hi_score.no_xw, color = numcros))+
+  geom_point()+
+  labs(x= "Score without Crosswalk",
+       y = "Score with Crosswalk",
+       color = "# Possible SOCs from Crosswalk",
+       title = "Asia Lymph")
+```
+
+# ATP by # of NOC Scores
+```{r}
+ggplot(atp_full, aes(y = hi_score.xw, x = hi_score.no_xw, color = numcros))+
+  geom_point()+
+  labs(x= "Score without Crosswalk",
+       y = "Score with Crosswalk",
+       color = "# Possible SOCs from Crosswalk",
+       title = "ATP")
+```
+
+# USR by # of SOC1980 Scores
+```{r}
+ggplot(usr_full, aes(y = hi_score.xw, x = hi_score.no_xw, color = numcros))+
+  geom_point()+
+  labs(x= "Score without Crosswalk",
+       y = "Score with Crosswalk",
+       color = "# Possible SOCs from Crosswalk",
+       title = "USR")
+```
+
+# Score Differences 
+## USR
+```{r}
+usr_full$score_diff = usr_full$hi_score.xw-usr_full$hi_score.no_xw
+atp_full$score_diff = atp_full$hi_score.xw-atp_full$hi_score.no_xw
+lymph_full$score_diff = lymph_full$hi_score.xw-lymph_full$hi_score.no_xw
+```
+
+```{r}
+ggplot(usr_full)+
+  geom_histogram(aes(x = score_diff),  binwidth = .05 )+
+  labs(x = "Xwalk Score - No Xwalk Score",
+       title = "USR")+
+  scale_x_continuous(limits= c(-1,1))
+```
+```{r}
+ggplot(atp_full)+
+  geom_histogram(aes(x = score_diff),  binwidth = .05 )+
+  labs(x = "Xwalk Score - No Xwalk Score",
+       title = "ATP")+
+  scale_x_continuous(limits= c(-1,1))
+```
+
+```{r}
+ggplot(lymph_full)+
+  geom_histogram(aes(x = score_diff),  binwidth = .05 )+
+  labs(x = "Xwalk Score - No Xwalk Score",
+       title = "Lymph")+
+  scale_x_continuous(limits= c(-1,1))
+```
+
+

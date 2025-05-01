@@ -1,0 +1,741 @@
+---
+title: "Validation for Soccer Model 0.0.4"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(socR)
+library(gtsummary)
+library(gt)
+library(kableExtra)
+source('read_coder_file.R', local = TRUE)
+source('rank.R', local = TRUE)
+source('summarize_df_weighted.R', local = TRUE)
+source('pivot_data_longer.R', local = TRUE)
+source('faceted_comp_plot_wt.R', local = TRUE)
+```
+
+# Data Inputs
+## Coder
+```{r coder datasets, include = FALSE}
+usr_coder <- read_coder_file('/Users/orszagl2/Documents/socR/usr_coder.csv')
+lymph_coder <- read_coder_file("/Users/orszagl2/Documents/socR/asia_lymph_coder.csv")
+atp_coder <- read_coder_file("/Users/orszagl2/Documents/socR/atp500_coder.csv")
+```
+
+## No Crosswalk
+```{r no xwalk datasets, include = FALSE}
+usr_no_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model4.0/usr_no_xw.xlsx")
+lymph_no_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model4.0/lymph_no_xw.xlsx")
+atp_no_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model4.0/atp_no_xw.xlsx")
+```
+
+## Crosswalk
+```{r xwalk datasets, include = FALSE}
+usr_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model3.0/usr_xw.xlsx")
+lymph_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model3.0/lymph_xw.xlsx")
+atp_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model3.0/atp_xw.xlsx")
+```
+
+# Agreement
+```{r calculating agreement, include= FALSE}
+# USR
+usr_cmp <- rank(usr_no_crosswalk, usr_coder)
+usr_cmp_crosswalk <- rank(usr_crosswalk, usr_coder)
+# ATP
+atp_cmp <- rank(atp_no_crosswalk, atp_coder)
+atp_cmp_crosswalk <- rank(atp_crosswalk, atp_coder)
+# Lymph
+lymph_cmp <- rank(lymph_no_crosswalk, lymph_coder)
+lymph_cmp_crosswalk <- rank(lymph_crosswalk, lymph_coder)
+```
+
+# Full Datasets (X-walk Joined with Non-Xwalk & # of scores)
+## Crosswalks
+```{r read in xwalks, include = FALSE}
+xwalk_lymph = read.csv('/Users/orszagl2/Documents/socR/crosswalk files/isco1988_soc2010.csv')
+xwalk_lymph = xwalk(xwalk_lymph)
+xwalk_usr = read.csv('/Users/orszagl2/Documents/socR/crosswalk files/soc1980_soc2010.csv')
+xwalk_usr = xwalk(xwalk_usr)
+xwalk_atp = read.csv('/Users/orszagl2/Documents/socR/crosswalk files/noc2011_soc2010_via_soc2018.csv')
+xwalk_atp = xwalk(xwalk_atp)
+```
+
+# Functions Needed
+```{r to levels, include = FALSE}
+to_2d <- to_level(soc2010_all,soc2d)
+to_3d <- to_level(soc2010_all,soc3d)
+to_5d <- to_level(soc2010_all,soc5d)
+```
+
+```{r replacements, include = FALSE}
+replace_with_to_5d <- function(df) {
+  # Loop through each column name
+  df <- df %>%
+    mutate(across(starts_with("soc2010"), ~ to_5d(.)))
+  return(df)
+}
+
+replace_with_to_2d <- function(df) {
+  # Loop through each column name
+  df <- df %>%
+    mutate(across(starts_with("soc2010"), ~ to_2d(.)))
+  
+  return(df)
+}
+replace_with_to_3d <- function(df) {
+  # Loop through each column name
+  df <- df %>%
+    mutate(across(starts_with("soc2010"), ~ to_3d(.)))
+  
+  return(df)
+}
+```
+
+# Graph
+```{r set up longer df, include = FALSE}
+df_summary1 = data.frame(
+  interval = levels(cut(seq(0, 1, length.out = 100), 
+                        breaks = seq(0, 1, length.out = 21), 
+                        include.lowest = TRUE)))
+```
+
+```{r set up shorter df, include = FALSE}
+df_summary2 = data.frame(
+  interval = levels(cut(seq(0, 1, length.out = 100), 
+                        breaks = seq(0, 1, length.out = 11), 
+                        include.lowest = TRUE)))
+```
+
+```{r labels & fill in summary df, include = FALSE}
+df_summary1$usr_no_x <- summarize_df_weighted(usr_cmp, 21, "usr_no_x", "usr_no_x_pct")
+df_summary1$usr_x <- summarize_df_weighted(usr_cmp_crosswalk, 21, "usr_x", "usr_x_pct")
+df_summary2$atp_no_x <- summarize_df_weighted(atp_cmp, 11, "atp_no_x", "atp_no_x_pct")
+df_summary2$atp_x <- summarize_df_weighted(atp_cmp_crosswalk, 11, "atp_x", "atp_x_pct")
+df_summary2$lymph_no_x <- summarize_df_weighted(lymph_cmp, 11, "lymph_no_x", "lymph_no_x_pct")
+df_summary2$lymph_x <- summarize_df_weighted(lymph_cmp_crosswalk, 11, "lymph_x", "lymph_x_pct")
+```
+
+```{r fix interval labels, include = FALSE}
+df_summary1$start_value = as.numeric(sub("\\((.+),.+\\]", "\\1", as.character(df_summary1$interval)))
+df_summary2$start_value = as.numeric(sub("\\((.+),.+\\]", "\\1", as.character(df_summary2$interval)))
+df_summary1$start_value = replace_na(df_summary1$start_value, 0)
+df_summary2$start_value = replace_na(df_summary2$start_value, 0)
+```
+
+```{r full summary & graph, warning = FALSE, echo = FALSE}
+df_summary3 = full_join(df_summary2, select(df_summary1, - interval), by = "start_value")
+df_long <- pivot_data_long(df_summary3)
+faceted_comp_plot_wt(df_long)
+```
+
+# Table 1
+## Set Up Dataframe
+```{r empty df, include = FALSE}
+result_df = data.frame(row.names = c("usr_no_x", "usr_x", "atp_no_x", "atp_x", "lymph_no_x", "lymph_x"))
+```
+
+## 6 Digit Agreement
+### USR
+```{r usr 6 dig, include = FALSE}
+usr_cmp <- rank(usr_no_crosswalk, usr_coder)
+result_df[1,1] = usr_cmp %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+usr_cmp_crosswalk <- rank(usr_crosswalk, usr_coder)
+result_df[2,1] = usr_cmp_crosswalk %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+### ATP
+```{r atp 6 dig, include = FALSE}
+atp_cmp <- rank(atp_no_crosswalk, atp_coder)
+result_df[3,1] = atp_cmp %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+atp_cmp_crosswalk <- rank(atp_crosswalk, atp_coder)
+result_df[4,1] = atp_cmp_crosswalk %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+### Lymph
+```{r lymph 6 dig, include = FALSE}
+lymph_cmp <- rank(lymph_no_crosswalk, lymph_coder)
+result_df[5,1] = lymph_cmp %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+lymph_cmp_crosswalk <- rank(lymph_crosswalk, lymph_coder)
+result_df[6,1] = lymph_cmp_crosswalk %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+## 5 Digit Agreement
+### USR
+```{r recode coding df usr 5dig, include = FALSE}
+usr_coder_recode <- data.frame(
+  soc2010_coder = unlist(usr_coder$soc2010_coder),
+  row_id = rep(usr_coder$row_id, each = 3) # Ensure each `row_id` repeats 3 times
+)
+usr_coder_recode$dig5 <- to_5d(usr_coder_recode$soc2010_coder)
+usr_coder5 = usr_coder
+usr_coder5 <- usr_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig5), .groups = "drop") %>%
+  right_join(select(usr_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r usr replacement, include = FALSE}
+usr_crosswalk5 = replace_with_to_5d(usr_crosswalk)
+usr_no_crosswalk5 = replace_with_to_5d(usr_no_crosswalk)
+```
+
+```{r usr table 5 dig, include = FALSE}
+usr_cmp5 <- rank(usr_no_crosswalk5, usr_coder5)
+result_df[1,2] = usr_cmp5 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+usr_cmp_crosswalk5 <- rank(usr_crosswalk5, usr_coder5)
+result_df[2,2] = usr_cmp_crosswalk5 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+### ATP
+```{r recode coding df atp 5 dig, include = FALSE}
+atp_coder_recode <- data.frame(
+  soc2010_coder = unlist(atp_coder$soc2010_coder),
+  row_id = rep(atp_coder$row_id, each = 3) # Ensure each `row_id` repeats 3 times
+)
+atp_coder_recode$dig5 <- to_5d(atp_coder_recode$soc2010_coder)
+atp_coder5 = atp_coder
+atp_coder5 <- atp_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig5), .groups = "drop") %>%
+  right_join(select(atp_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r atp replacement, include = FALSE}
+atp_crosswalk5 = replace_with_to_5d(atp_crosswalk)
+atp_no_crosswalk5 = replace_with_to_5d(atp_no_crosswalk)
+```
+
+```{r atp table 5 dig, include = FALSE}
+atp_cmp5 <- rank(atp_no_crosswalk5, atp_coder5)
+result_df[3,2] = atp_cmp5 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+atp_cmp_crosswalk5 <- rank(atp_crosswalk5, atp_coder5)
+result_df[4,2] = atp_cmp_crosswalk5 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+### Lymph
+```{r recode coding df lymph 5 dig, include = FALSE}
+lymph_coder_recode <- data.frame(
+  soc2010_coder = unlist(lymph_coder$soc2010_coder),
+  row_id = rep(lymph_coder$row_id, each = 3) # Ensure each `row_id` repeats 3 times
+)
+lymph_coder_recode$dig5 <- to_5d(lymph_coder_recode$soc2010_coder)
+lymph_coder5 <- lymph_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig5), .groups = "drop") %>%
+  right_join(select(lymph_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r lymph replacement, include = FALSE}
+lymph_crosswalk5 = replace_with_to_5d(lymph_crosswalk)
+lymph_no_crosswalk5 = replace_with_to_5d(lymph_no_crosswalk)
+```
+
+```{r lymph table 5 dig, include = FALSE}
+lymph_cmp5 <- rank(lymph_no_crosswalk5, lymph_coder5)
+result_df[5,2] = lymph_cmp5 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+lymph_cmp_crosswalk5 <- rank(lymph_crosswalk5, lymph_coder5)
+result_df[6,2] = lymph_cmp_crosswalk5 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+### USR
+```{r recode coding usr 3 dig, include = FALSE}
+usr_coder_recode$dig3 <- to_3d(usr_coder_recode$soc2010_coder)
+usr_coder3 <- usr_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig3), .groups = "drop") %>%
+  right_join(select(usr_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r usr replacement 3 dig, include = FALSE}
+usr_crosswalk3 = replace_with_to_3d(usr_crosswalk)
+usr_no_crosswalk3 = replace_with_to_3d(usr_no_crosswalk)
+```
+
+```{r usr table 3 dig, include = FALSE}
+usr_cmp3 <- rank(usr_no_crosswalk3, usr_coder3)
+result_df[1,3] = usr_cmp3 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+usr_cmp_crosswalk3 <- rank(usr_crosswalk3, usr_coder3)
+result_df[2,3] = usr_cmp_crosswalk3 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+### ATP
+```{r recode coding atp 3 dig, include = FALSE}
+atp_coder_recode$dig3 <- to_3d(atp_coder_recode$soc2010_coder)
+atp_coder3 = atp_coder
+atp_coder3 <- atp_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig3), .groups = "drop") %>%
+  right_join(select(atp_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r atp replacement 3 dig, include = FALSE}
+atp_crosswalk3 = replace_with_to_3d(atp_crosswalk)
+atp_no_crosswalk3 = replace_with_to_3d(atp_no_crosswalk)
+```
+
+```{r atp table 3 dig, include = FALSE}
+atp_cmp3 <- rank(atp_no_crosswalk3, atp_coder3)
+result_df[3,3] = atp_cmp3 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+atp_cmp_crosswalk3 <- rank(atp_crosswalk3, atp_coder3)
+result_df[4,3] = atp_cmp_crosswalk3 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+### Lymph
+```{r recode coding lymph 3 dig, include = FALSE}
+lymph_coder_recode$dig3 <- to_3d(lymph_coder_recode$soc2010_coder)
+lymph_coder3 = lymph_coder
+lymph_coder3 <- lymph_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig3), .groups = "drop") %>%
+  right_join(select(lymph_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r lymph replacement 3 dig, include = FALSE}
+lymph_crosswalk3 = replace_with_to_3d(lymph_crosswalk)
+lymph_no_crosswalk3 = replace_with_to_3d(lymph_no_crosswalk)
+```
+
+```{r lymph table 3 dig, include = FALSE}
+lymph_cmp3 <- rank(lymph_no_crosswalk3, lymph_coder3)
+result_df[5,3] = lymph_cmp3 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+lymph_cmp_crosswalk3 <- rank(lymph_crosswalk3, lymph_coder3)
+result_df[6,3] = lymph_cmp_crosswalk3 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+
+## 2 Digit Agreement
+### USR
+```{r recode coding usr 2 dig, include = FALSE}
+usr_coder_recode$dig2 <- to_2d(usr_coder_recode$soc2010_coder)
+usr_coder2 = atp_coder
+usr_coder2 <- usr_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig2), .groups = "drop") %>%
+  right_join(select(usr_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r usr replacement 2 dig, include = FALSE}
+usr_crosswalk2 = replace_with_to_2d(usr_crosswalk)
+usr_no_crosswalk2 = replace_with_to_2d(usr_no_crosswalk)
+```
+
+```{r usr table 2 dig, include = FALSE}
+usr_cmp2 <- rank(usr_no_crosswalk2, usr_coder2)
+result_df[1,4] = usr_cmp2 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+usr_cmp_crosswalk2 <- rank(usr_crosswalk2, usr_coder2)
+result_df[2,4] = usr_cmp_crosswalk2 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+### ATP
+```{r recode coding atp 2 dig, include = FALSE}
+atp_coder_recode$dig2 <- to_2d(atp_coder_recode$soc2010_coder)
+atp_coder2 = atp_coder
+atp_coder2 <- atp_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig2), .groups = "drop") %>%
+  right_join(select(atp_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r atp replacement 2 dig, include = FALSE}
+atp_crosswalk2 = replace_with_to_2d(atp_crosswalk)
+atp_no_crosswalk2 = replace_with_to_2d(atp_no_crosswalk)
+```
+
+```{r atp table 2 dig, include = FALSE}
+atp_cmp2 <- rank(atp_no_crosswalk2, atp_coder2)
+result_df[3,4] = atp_cmp2 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+atp_cmp_crosswalk2 <- rank(atp_crosswalk2, atp_coder2)
+result_df[4,4] = atp_cmp_crosswalk2 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+### Lymph
+```{r recode coding lymph 2 dig, include = FALSE}
+lymph_coder_recode$dig2 <- to_2d(lymph_coder_recode$soc2010_coder)
+lymph_coder2 = atp_coder
+lymph_coder2 <- lymph_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig2), .groups = "drop") %>%
+  right_join(select(lymph_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r lymph replacement 2 dig, include = FALSE}
+lymph_crosswalk2 = replace_with_to_2d(lymph_crosswalk)
+lymph_no_crosswalk2 = replace_with_to_2d(lymph_no_crosswalk)
+```
+
+```{r lymph table 2 dig, include = FALSE}
+lymph_cmp2 <- rank(lymph_no_crosswalk2, lymph_coder2)
+result_df[5,4] = lymph_cmp2 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+lymph_cmp_crosswalk2 <- rank(lymph_crosswalk2, lymph_coder2)
+result_df[6,4] = lymph_cmp_crosswalk2 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+## Ties
+### USR
+```{r usr ties, include = FALSE}
+result_df[1,5] = usr_no_crosswalk%>%
+  summarise(pct = mean(score_1-score_2<10^-6)) %>%
+  pull(pct)
+result_df[2,5] = usr_crosswalk%>%
+  summarise(pct = mean(score_1-score_2<10^-6)) %>%
+  pull(pct)
+```
+
+### ATP
+```{r atp ties, include = FALSE}
+result_df[3,5] = atp_no_crosswalk%>%
+  summarise(pct = mean(score_1-score_2<10^-6)) %>%
+  pull(pct)
+result_df[4,5] = atp_crosswalk%>%
+  summarise(pct = mean(score_1-score_2<10^-6)) %>%
+  pull(pct)
+```
+
+### Lymph
+```{r lymph ties, include = FALSE}
+result_df[5,5] = lymph_no_crosswalk%>%
+  summarise(pct = mean(score_1-score_2<10^-6)) %>%
+  pull(pct)
+result_df[6,5] = lymph_crosswalk%>%
+  summarise(pct = mean(score_1-score_2<10^-6)) %>%
+  pull(pct)
+```
+
+## Medians
+### USR
+```{r usr medians, include = FALSE}
+result_df[1,6] = usr_no_crosswalk%>%
+  summarise(med = median(score_1)) %>%
+  pull(med)
+result_df[2,6] = usr_crosswalk%>%
+  summarise(med = median(score_1)) %>%
+  pull(med)
+```
+
+### ATP
+```{r atp median, include = FALSE}
+result_df[3,6] = atp_no_crosswalk%>%
+  summarise(med = median(score_1)) %>%
+  pull(med)
+result_df[4,6] = atp_crosswalk%>%
+  summarise(med = median(score_1)) %>%
+  pull(med)
+```
+
+### Lymph
+```{r lymph medians, include = FALSE}
+result_df[5,6] = lymph_no_crosswalk%>%
+  summarise(med = median(score_1)) %>%
+  pull(med)
+result_df[6,6] = lymph_crosswalk%>%
+  summarise(med = median(score_1)) %>%
+  pull(med)
+```
+
+## IQRs
+### USR
+```{r usr iqrs, include = FALSE}
+result_df[1,7] = usr_no_crosswalk%>%
+  summarise(q1 = list(quantile(score_1, probs = 0.25))) %>%
+  pull(q1)
+result_df[1,8] = usr_no_crosswalk%>%
+  summarise(q3 = list(quantile(score_1, probs = 0.75))) %>%
+  pull(q3)
+result_df[2,7] = usr_crosswalk%>%
+  summarise(q1 = list(quantile(score_1, probs = 0.25))) %>%
+  pull(q1)
+result_df[2,8] = usr_crosswalk%>%
+  summarise(q3 = list(quantile(score_1, probs = 0.75))) %>%
+  pull(q3)
+```
+
+### ATP
+```{r atp iqrs, include = FALSE}
+result_df[3,7] = atp_no_crosswalk%>%
+  summarise(q1 = list(quantile(score_1, probs = 0.25))) %>%
+  pull(q1)
+result_df[3,8] = atp_no_crosswalk%>%
+  summarise(q3 = list(quantile(score_1, probs = 0.75))) %>%
+  pull(q3)
+result_df[4,7] = atp_crosswalk%>%
+  summarise(q1 = list(quantile(score_1, probs = 0.25))) %>%
+  pull(q1)
+result_df[4,8] = atp_crosswalk%>%
+  summarise(q3 = list(quantile(score_1, probs = 0.75))) %>%
+  pull(q3)
+```
+
+### Lymph
+```{r lymph iqrs, include = FALSE}
+result_df[5,7] = lymph_no_crosswalk%>%
+  summarise(q1 = list(quantile(score_1, probs = 0.25))) %>%
+  pull(q1)
+result_df[5,8] = lymph_no_crosswalk%>%
+  summarise(q3 = list(quantile(score_1, probs = 0.75))) %>%
+  pull(q3)
+result_df[6,7] = lymph_crosswalk%>%
+  summarise(q1 = list(quantile(score_1, probs = 0.25))) %>%
+  pull(q1)
+result_df[6,8] = lymph_crosswalk%>%
+  summarise(q3 = list(quantile(score_1, probs = 0.75))) %>%
+  pull(q3)
+```
+
+```{r name columns, include = FALSE}
+colnames(result_df) = c("6dig", "5dig", "3dig", "2dig", "tie", "median_score", "q1", "q3")
+```
+
+```{r rounded table, include = FALSE}
+result_df2 <- result_df %>%
+  mutate(
+    median_score = round(median_score, 2),
+    q1 = round(q1, 2),
+    q3 = round(q3, 2),
+    combined = paste0(median_score, " (", q1, "-", q3, ")")
+  )
+```
+
+```{r reorg table, include = FALSE}
+result_df = result_df2[, c("2dig", "3dig", "5dig", "6dig", "tie", "combined")]
+colnames(result_df) = c("2-Digit", "3-Digit", "5-Digit", "6-Digit", "Tie", "Median (IQR)")
+```
+
+
+# Table
+```{r rename rows, include = FALSE}
+result_df <- result_df %>%
+  tibble::rownames_to_column("rownames")
+result_df$Group = c("US Renal", "US Renal", "ATP", "ATP", "Asia Lymph", "Asia Lymph")
+```
+
+```{r rename row spanners, include = FALSE}
+result_df$rownames= c("Without Crosswalk", "With Crosswalk","Without Crosswalk", "With Crosswalk","Without Crosswalk", "With Crosswalk")
+```
+
+```{r create table, width = 10, height = 8, echo = FALSE}
+result_df %>%
+  gt(rowname_col = "rownames", groupname_col = "Group", row_group_as_column = TRUE) %>%
+  fmt_percent(
+    columns = c("6-Digit", "5-Digit", "3-Digit", "2-Digit", "Tie"),
+    decimals = 2  # Round to 2 decimal places
+  ) %>%
+  tab_spanner(
+    label = "Percent agreement by SOC hierarchical levels",
+    columns = c("6-Digit", "5-Digit", "3-Digit", "2-Digit")
+  ) %>%
+  tab_options(
+    table.font.size = "80%",            # Reduce font size to 80% of default
+    data_row.padding = px(3),          # Reduce padding between rows
+    row_group.padding = px(3),         # Reduce padding for row groups
+    table.width = pct(100)             # Ensure the table width stretches to fit
+  )
+```
+
+# Ranks Dataframe
+```{r create dataframe, include = FALSE}
+ranks_df = data.frame(1,2,3,4,5,6,7,8,9,10,11)
+```
+
+```{r usr no xwalk, include = FALSE}
+ranks_df[1,] <- usr_cmp %>%
+  summarize(
+    !!!setNames(
+      lapply(1:max(.$rank, na.rm = TRUE), function(i) mean(.$rank <= i, na.rm = TRUE)),
+      paste0("pct_", 1:max(.$rank, na.rm = TRUE))
+    )
+  )
+```
+
+```{r usr xwalk, include = FALSE}
+ranks_df[2,] <- usr_cmp_crosswalk %>%
+  summarize(
+    !!!setNames(
+      lapply(1:max(.$rank, na.rm = TRUE), function(i) mean(.$rank <= i, na.rm = TRUE)),
+      paste0("pct_", 1:max(.$rank, na.rm = TRUE))
+    )
+  )
+```
+
+```{r atp no xwalk, include = FALSE}
+ranks_df[3,] <- atp_cmp %>%
+  summarize(
+    !!!setNames(
+      lapply(1:max(.$rank, na.rm = TRUE), function(i) mean(.$rank <= i, na.rm = TRUE)),
+      paste0("pct_", 1:max(.$rank, na.rm = TRUE))
+    )
+  )
+```
+
+```{r atp xwalk, include = FALSE}
+ranks_df[4,] <- atp_cmp_crosswalk %>%
+  summarize(
+    !!!setNames(
+      lapply(1:max(.$rank, na.rm = TRUE), function(i) mean(.$rank <= i, na.rm = TRUE)),
+      paste0("pct_", 1:max(.$rank, na.rm = TRUE))
+    )
+  )
+```
+
+```{r lymph no xwalk, include = FALSE}
+ranks_df[5,] <- lymph_cmp %>%
+  summarize(
+    !!!setNames(
+      lapply(1:max(.$rank, na.rm = TRUE), function(i) mean(.$rank <= i, na.rm = TRUE)),
+      paste0("pct_", 1:max(.$rank, na.rm = TRUE))
+    )
+  )
+```
+
+```{r lymph xwalk, include = FALSE}
+ranks_df[6,] <- lymph_cmp_crosswalk %>%
+  summarize(
+    !!!setNames(
+      lapply(1:max(.$rank, na.rm = TRUE), function(i) mean(.$rank <= i, na.rm = TRUE)),
+      paste0("pct_", 1:max(.$rank, na.rm = TRUE))
+    )
+  )
+```
+
+```{r reorganize table, include = FALSE}
+rownames(ranks_df) = c("USR without Crosswalk", "USR with Crosswalk", "ATP without Crosswalk", "ATP with Crosswalk", "Asia Lymph without Crosswalk", "Asia Lymph with Crosswalk")
+```
+
+```{r pivot df, include = FALSE}
+ranks_df <- ranks_df %>%
+  rownames_to_column(var = "study") # "study" will hold the old row names
+
+long_df <- ranks_df %>%
+  pivot_longer(
+    cols = starts_with("X"),     # Select percentage columns
+    names_to = "pct_rank",          # New column for the rank
+    values_to = "cumulative_pct"    # New column for the cumulative percentage
+  ) %>%
+  mutate(
+    pct_rank = as.numeric(gsub("X", "", pct_rank)) # Convert rank names to numeric
+  )
+```
+
+## Plot
+```{r plot, echo = FALSE}
+ggplot(long_df, aes(x = pct_rank, y = cumulative_pct, color = study, group = study)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(
+    x = "Rank of expert SOC",
+    y = "Cumulative proportion of jobs",
+    title = "Cumulative Percentages by Rank",
+    color = "Study"
+  ) +
+  scale_x_continuous(breaks = 1:11) +
+  scale_y_continuous(limits = c(0,1))+
+  theme_minimal()
+```
+
+# Box Plots
+```{r usr no crosswalk, echo = FALSE}
+ggplot(usr_cmp, aes(x = rank, y = hi_score))+
+  geom_boxplot(aes(group = rank))+
+  labs(x= "Rank", y = "S1 Score", title = "USR No Crosswalk Rank vs. S1 Score")+
+  scale_x_continuous(breaks = c(1:11))+
+  theme_minimal()
+```
+```{r usr no crosswalk boxplot, echo = FALSE}
+ggplot(usr_cmp_crosswalk, aes(x = rank, y = hi_score))+
+  geom_boxplot(aes(group = rank))+
+  labs(x= "Rank", y = "S1 Score", title = "USR No Crosswalk Rank vs. S1 Score")+
+  scale_x_continuous(breaks = c(1:11))+
+  theme_minimal()
+```
+
+```{r usr crosswalk boxplot, echo = FALSE}
+ggplot(usr_cmp, aes(x = rank, y = hi_score))+
+  geom_boxplot(aes(group = rank))+
+  labs(x= "Rank", y = "S1 Score", title = "USR Crosswalk Rank vs. S1 Score")+
+  scale_x_continuous(breaks = c(1:11))+
+  theme_minimal()
+```
+
+```{r atp no crosswalk boxplot, echo = FALSE}
+ggplot(atp_cmp, aes(x = rank, y = hi_score))+
+  geom_boxplot(aes(group = rank))+
+  labs(x= "Rank", y = "S1 Score", title = "ATP No Crosswalk Rank vs. S1 Score")+
+  scale_x_continuous(breaks = c(1:11))+
+  theme_minimal()
+```
+
+```{r atp crosswalk boxplot, echo = FALSE}
+ggplot(atp_cmp_crosswalk, aes(x = rank, y = hi_score))+
+  geom_boxplot(aes(group = rank))+
+  labs(x= "Rank", y = "S1 Score", title = "Atp Crosswalk Rank vs. S1 Score")+
+  scale_x_continuous(breaks = c(1:11))+
+  theme_minimal()
+```
+
+```{r lymph no crosswalk boxplot, echo = FALSE}
+ggplot(lymph_cmp, aes(x = rank, y = hi_score))+
+  geom_boxplot(aes(group = rank))+
+  labs(x= "Rank", y = "S1 Score", title = "Lymph No Crosswalk Rank vs. S1 Score")+
+  scale_x_continuous(breaks = c(1:11))+
+  theme_minimal()
+```
+
+```{r lymph crosswalk boxplot, echo = FALSE}
+ggplot(lymph_cmp_crosswalk, aes(x = rank, y = hi_score))+
+  geom_boxplot(aes(group = rank))+
+  labs(x= "Rank", y = "S1 Score", title = "Lymph Crosswalk Rank vs. S1 Score")+
+  scale_x_continuous(breaks = c(1:11))+
+  theme_minimal()
+```

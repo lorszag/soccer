@@ -1,0 +1,105 @@
+---
+title: "Soccer Validation (November 2024)"
+output:
+  pdf_document: default
+  html_document: default
+date: "2024-11-14"
+author: Leila Orszag
+---
+
+```{r, warning = FALSE}
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(socR)
+```
+
+```{r}
+rank <- function(soccer,coder,nomatch=11){
+  soccer %>% right_join(coder,by="Id") %>%
+    nest(soc2010_soccer=matches("soc2010_\\d+"),score=matches("score_\\d+"),title=matches("title_\\d+")) |>
+    mutate(
+      soc2010_soccer = map(soc2010_soccer,\(x) as.vector(unlist(x))),
+      title = map(title,\(x) as.vector(unlist(x))),
+      score = map(score,\(x) as.vector(unlist(x))),
+      rank = map2_int(soc2010_coder,soc2010_soccer,\(x,y) match(x,y,nomatch=nomatch) ),
+      hi_score=map_dbl(score,\(x) x[1]),
+      rank_score=map2_dbl(rank,score,\(x,y) if_else(x<nomatch,y[x],0))
+    ) %>% arrange(Id)
+}
+```
+
+# USR
+
+```{r}
+usr_coder <- read_csv("/Users/orszagl2/Documents/soccer/usr_coder.csv",show_col_types = FALSE) %>%
+  filter(is_valid_6digit_soc2010(soc2010_1)) %>%
+  mutate(
+    Id=paste0(str_pad(Id,5,"left","0")),
+    soc2010_coder=map(soc2010_1,\(x) c(x)) ) %>%
+  select(Id,soc2010_coder)
+```
+
+```{r}
+usr_browser <- read_excel("/Users/orszagl2/Documents/soccer/usr_soccer_input_soccer_output.xlsx")
+
+usr_browser_cmp <- rank(usr_browser, usr_coder)
+
+print(usr_browser_cmp %>% summarise(pctAg = mean(rank==1) ))
+
+usr_browser_cmp %>% 
+  mutate(rank=ordered(rank,labels = c(1:10,"11+")) )  %>% 
+  ggplot(aes(x=rank)) + 
+  geom_histogram(stat="count")
+```
+
+# Asia Lymph
+
+```{r}
+lymph_coder <- read_csv("/Users/orszagl2/Documents/soccer/asia_lymph_coder.csv",show_col_types = FALSE) %>%
+  filter(is_valid_6digit_soc2010(soc2010_1)) %>%
+  mutate(
+    Id=paste0(str_pad(Id,5,"left","0")),
+    soc2010_coder=map(soc2010_1,\(x) c(x)) ) %>%
+  select(Id,soc2010_coder)
+```
+
+```{r}
+lymph_browser <- read_excel("/Users/orszagl2/Documents/soccer/asia_lymph_soccer_output.xlsx")
+
+lymph_browser_cmp <- rank(lymph_browser, lymph_coder)
+
+print(lymph_browser_cmp %>% summarise(pctAg = mean(rank==1) ))
+
+lymph_browser_cmp %>% 
+  mutate(rank=ordered(rank,labels = c(1:10,"11+")) )  %>% 
+  ggplot(aes(x=rank)) + 
+  geom_histogram(stat="count")
+```
+
+# ATP
+
+```{r}
+atp_coder <- read_csv("/Users/orszagl2/Documents/soccer/atp500_coder.csv",show_col_types = FALSE) %>%
+  filter(is_valid_6digit_soc2010(soc2010_1)) %>%
+  mutate(
+    Id=paste0(str_pad(Id,5,"left","0")),
+    soc2010_coder=map(soc2010_1,\(x) c(x)) ) %>%
+  select(Id,soc2010_coder)
+```
+
+```{r}
+atp_browser <- read_excel("/Users/orszagl2/Documents/soccer/atp500_soccer_output.xlsx")
+
+atp_browser_cmp <- rank(atp_browser, atp_coder)
+
+print(atp_browser_cmp %>% summarise(pctAg = mean(rank==1) ))
+
+atp_browser_cmp %>% 
+  mutate(rank=ordered(rank,labels = c(1:10,"11+")) )  %>% 
+  ggplot(aes(x=rank)) + 
+  geom_histogram(stat="count")
+```
+
+
+

@@ -1,0 +1,1429 @@
+---
+title: "Tables & Figures"
+output:
+  pdf_document: default
+  html_document: default
+date: "2025-01-10"
+---
+
+```{r setup, include=FALSE}
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(socR)
+library(gtsummary)
+library(gt)
+library(kableExtra)
+```
+
+```{r}
+to_2d <- to_level(soc2010_all,soc2d)
+to_3d <- to_level(soc2010_all,soc3d)
+to_5d <- to_level(soc2010_all,soc5d)
+```
+
+```{r}
+rank <- function(soccer, coder, nomatch = 11) {
+  soccer %>% 
+    right_join(select(coder, Id, soc2010_coder, row_id), by = "Id") %>%
+    mutate(
+      # Directly handle soc2010_coder and soc2010_soccer without nesting/unlisting
+      rank = map2_int(soc2010_coder, soc2010_soccer, \(x, y) {
+        ranks <- match(x, y, nomatch = nomatch)
+        if (length(ranks) == 0) nomatch else min(ranks, na.rm = TRUE) # Pick the minimum rank
+      }),
+      hi_score = map_dbl(score, \(x) x[1])) %>%
+    arrange(Id)
+}
+```
+
+# Data Inputs
+## Coder
+```{r}
+usr_coder <- read_csv("/Users/orszagl2/Documents/socR/usr_coder.csv",show_col_types = FALSE) %>%
+  filter(is_valid_6digit_soc2010(soc2010_1)) %>%
+  mutate(
+    Id=paste0(str_pad(Id,5,"left","0")),
+    soc2010_coder = pmap(list(soc2010_1, soc2010_2, soc2010_3), ~ c(..1, ..2, ..3)),
+    row_id = row_number())
+```
+
+```{r}
+lymph_coder <- read_csv("/Users/orszagl2/Documents/socR/asia_lymph_coder.csv",show_col_types = FALSE) %>%
+  filter(is_valid_6digit_soc2010(soc2010_1)) %>%
+  mutate(
+    Id=paste0(str_pad(Id,5,"left","0")),
+    soc2010_coder = pmap(list(soc2010_1, soc2010_2, soc2010_3), ~ c(..1, ..2, ..3)),
+    row_id = row_number())
+```
+
+```{r}
+atp_coder <- read_csv("/Users/orszagl2/Documents/socR/atp500_coder.csv",show_col_types = FALSE) %>%
+  filter(is_valid_6digit_soc2010(soc2010_1)) %>%
+  mutate(
+    Id=paste0(str_pad(Id,5,"left","0")),
+    soc2010_coder = pmap(list(soc2010_1, soc2010_2, soc2010_3), ~ c(..1, ..2, ..3)),
+    row_id = row_number())
+```
+
+## No Crosswalk
+```{r}
+usr_no_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/usr_no_crosswalk.xlsx")
+atp_no_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/atp_no_crosswalk.xlsx")
+lymph_no_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/asia_lymph_no_crosswalk.xlsx")
+```
+
+## Crosswalk
+```{r}
+usr_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/usr_crosswalk.xlsx")
+atp_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/atp_crosswalk.xlsx")
+lymph_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/asia_lymph_crosswalk.xlsx")
+```
+
+## Soccer 2.0
+```{r}
+usr_soc2 = read.csv('/Users/orszagl2/Documents/socR/soc2.0 files/usr_results.csv')
+atp_soc2 = read.csv('/Users/orszagl2/Documents/socR/soc2.0 files/atp_results.csv')
+lymph_soc2 = read.csv('/Users/orszagl2/Documents/socR/soc2.0 files/lymph_results.csv')
+```
+
+# Table 1
+## Set Up Dataframe
+```{r}
+result_df = data.frame(row.names = c("usr_no_x", "usr_x", "atp_no_x", "atp_x", "lymph_no_x", "lymph_x"))
+```
+
+## 6 Digit Agreement
+### USR
+```{r}
+usr_cmp <- rank(usr_no_crosswalk, usr_coder)
+result_df[1,1] = usr_cmp %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+usr_cmp_crosswalk <- rank(usr_crosswalk, usr_coder)
+result_df[2,1] = usr_cmp_crosswalk %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+usr_cmp_soc2 = rank(usr_soc2, usr_coder)
+```
+
+### ATP
+```{r}
+atp_cmp <- rank(atp_no_crosswalk, atp_coder)
+result_df[3,1] = atp_cmp %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+atp_cmp_crosswalk <- rank(atp_crosswalk, atp_coder)
+result_df[4,1] = atp_cmp_crosswalk %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+atp_cmp_soc2 = rank(atp_soc2, atp_coder)
+```
+
+### Lymph
+```{r}
+lymph_cmp <- rank(lymph_no_crosswalk, lymph_coder)
+result_df[5,1] = lymph_cmp %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+lymph_cmp_crosswalk <- rank(lymph_crosswalk, lymph_coder)
+result_df[6,1] = lymph_cmp_crosswalk %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+lymph_cmp_soc2 = rank(lymph_soc2, lymph_coder)
+```
+
+## 5 Digit Agreement
+```{r}
+replace_with_to_5d <- function(df) {
+  # Loop through each column name
+  df <- df %>%
+    mutate(across(starts_with("soc2010"), ~ to_5d(.)))
+  return(df)
+}
+```
+
+### USR
+```{r}
+usr_coder_recode <- data.frame(
+  soc2010_coder = unlist(usr_coder$soc2010_coder),
+  row_id = rep(usr_coder$row_id, each = 3) # Ensure each `row_id` repeats 3 times
+)
+usr_coder_recode$dig5 <- to_5d(usr_coder_recode$soc2010_coder)
+usr_coder5 = usr_coder
+usr_coder5 <- usr_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig5), .groups = "drop") %>%
+  right_join(select(usr_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r}
+usr_crosswalk5 = replace_with_to_5d(usr_crosswalk)
+usr_no_crosswalk5 = replace_with_to_5d(usr_no_crosswalk)
+```
+
+```{r}
+usr_cmp5 <- rank(usr_no_crosswalk5, usr_coder5)
+result_df[1,2] = usr_cmp5 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+usr_cmp_crosswalk5 <- rank(usr_crosswalk5, usr_coder5)
+result_df[2,2] = usr_cmp_crosswalk5 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+### ATP
+```{r}
+atp_coder_recode <- data.frame(
+  soc2010_coder = unlist(atp_coder$soc2010_coder),
+  row_id = rep(atp_coder$row_id, each = 3) # Ensure each `row_id` repeats 3 times
+)
+atp_coder_recode$dig5 <- to_5d(atp_coder_recode$soc2010_coder)
+atp_coder5 = atp_coder
+atp_coder5 <- atp_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig5), .groups = "drop") %>%
+  right_join(select(atp_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r}
+atp_crosswalk5 = replace_with_to_5d(atp_crosswalk)
+atp_no_crosswalk5 = replace_with_to_5d(atp_no_crosswalk)
+```
+
+```{r}
+atp_cmp5 <- rank(atp_no_crosswalk5, atp_coder5)
+result_df[3,2] = atp_cmp5 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+atp_cmp_crosswalk5 <- rank(atp_crosswalk5, atp_coder5)
+result_df[4,2] = atp_cmp_crosswalk5 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+### Lymph
+
+```{r}
+lymph_coder_recode <- data.frame(
+  soc2010_coder = unlist(lymph_coder$soc2010_coder),
+  row_id = rep(lymph_coder$row_id, each = 3) # Ensure each `row_id` repeats 3 times
+)
+lymph_coder_recode$dig5 <- to_5d(lymph_coder_recode$soc2010_coder)
+lymph_coder5 <- lymph_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig5), .groups = "drop") %>%
+  right_join(select(lymph_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r}
+lymph_crosswalk5 = replace_with_to_5d(lymph_crosswalk)
+lymph_no_crosswalk5 = replace_with_to_5d(lymph_no_crosswalk)
+```
+
+```{r}
+lymph_cmp5 <- rank(lymph_no_crosswalk5, lymph_coder5)
+result_df[5,2] = lymph_cmp5 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+lymph_cmp_crosswalk5 <- rank(lymph_crosswalk5, lymph_coder5)
+result_df[6,2] = lymph_cmp_crosswalk5 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+## 3 Digit Agreement
+```{r}
+replace_with_to_3d <- function(df) {
+  # Loop through each column name
+  df <- df %>%
+    mutate(across(starts_with("soc2010"), ~ to_3d(.)))
+  
+  return(df)
+}
+```
+
+### USR
+```{r}
+usr_coder_recode$dig3 <- to_3d(usr_coder_recode$soc2010_coder)
+usr_coder3 <- usr_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig3), .groups = "drop") %>%
+  right_join(select(usr_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r}
+usr_crosswalk3 = replace_with_to_3d(usr_crosswalk)
+usr_no_crosswalk3 = replace_with_to_3d(usr_no_crosswalk)
+```
+
+```{r}
+usr_cmp3 <- rank(usr_no_crosswalk3, usr_coder3)
+result_df[1,3] = usr_cmp3 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+usr_cmp_crosswalk3 <- rank(usr_crosswalk3, usr_coder3)
+result_df[2,3] = usr_cmp_crosswalk3 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+### ATP
+```{r}
+atp_coder_recode$dig3 <- to_3d(atp_coder_recode$soc2010_coder)
+atp_coder3 = atp_coder
+atp_coder3 <- atp_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig3), .groups = "drop") %>%
+  right_join(select(atp_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r}
+atp_crosswalk3 = replace_with_to_3d(atp_crosswalk)
+atp_no_crosswalk3 = replace_with_to_3d(atp_no_crosswalk)
+```
+
+```{r}
+atp_cmp3 <- rank(atp_no_crosswalk3, atp_coder3)
+result_df[3,3] = atp_cmp3 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+atp_cmp_crosswalk3 <- rank(atp_crosswalk3, atp_coder3)
+result_df[4,3] = atp_cmp_crosswalk3 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+### Lymph
+
+```{r}
+lymph_coder_recode$dig3 <- to_3d(lymph_coder_recode$soc2010_coder)
+lymph_coder3 = lymph_coder
+lymph_coder3 <- lymph_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig3), .groups = "drop") %>%
+  right_join(select(lymph_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r}
+lymph_crosswalk3 = replace_with_to_3d(lymph_crosswalk)
+lymph_no_crosswalk3 = replace_with_to_3d(lymph_no_crosswalk)
+```
+
+```{r}
+lymph_cmp3 <- rank(lymph_no_crosswalk3, lymph_coder3)
+result_df[5,3] = lymph_cmp3 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+lymph_cmp_crosswalk3 <- rank(lymph_crosswalk3, lymph_coder3)
+result_df[6,3] = lymph_cmp_crosswalk3 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+
+## 2 Digit Agreement
+```{r}
+replace_with_to_2d <- function(df) {
+  # Loop through each column name
+  df <- df %>%
+    mutate(across(starts_with("soc2010"), ~ to_2d(.)))
+  
+  return(df)
+}
+```
+
+### USR
+```{r}
+usr_coder_recode$dig2 <- to_2d(usr_coder_recode$soc2010_coder)
+usr_coder2 = atp_coder
+usr_coder2 <- usr_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig2), .groups = "drop") %>%
+  right_join(select(usr_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r}
+usr_crosswalk2 = replace_with_to_2d(usr_crosswalk)
+usr_no_crosswalk2 = replace_with_to_2d(usr_no_crosswalk)
+```
+
+```{r}
+usr_cmp2 <- rank(usr_no_crosswalk2, usr_coder2)
+result_df[1,4] = usr_cmp2 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+usr_cmp_crosswalk2 <- rank(usr_crosswalk2, usr_coder2)
+result_df[2,4] = usr_cmp_crosswalk2 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+### ATP
+```{r}
+atp_coder_recode$dig2 <- to_2d(atp_coder_recode$soc2010_coder)
+atp_coder2 = atp_coder
+atp_coder2 <- atp_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig2), .groups = "drop") %>%
+  right_join(select(atp_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r}
+atp_crosswalk2 = replace_with_to_2d(atp_crosswalk)
+atp_no_crosswalk2 = replace_with_to_2d(atp_no_crosswalk)
+```
+
+```{r}
+atp_cmp2 <- rank(atp_no_crosswalk2, atp_coder2)
+result_df[3,4] = atp_cmp2 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+atp_cmp_crosswalk2 <- rank(atp_crosswalk2, atp_coder2)
+result_df[4,4] = atp_cmp_crosswalk2 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+### Lymph
+
+```{r}
+lymph_coder_recode$dig2 <- to_2d(lymph_coder_recode$soc2010_coder)
+lymph_coder2 = atp_coder
+lymph_coder2 <- lymph_coder_recode %>%
+  group_by(row_id) %>%
+  summarise(soc2010_coder = list(dig2), .groups = "drop") %>%
+  right_join(select(lymph_coder, -soc2010_coder), by = "row_id")
+```
+
+```{r}
+lymph_crosswalk2 = replace_with_to_2d(lymph_crosswalk)
+lymph_no_crosswalk2 = replace_with_to_2d(lymph_no_crosswalk)
+```
+
+```{r}
+lymph_cmp2 <- rank(lymph_no_crosswalk2, lymph_coder2)
+result_df[5,4] = lymph_cmp2 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+lymph_cmp_crosswalk2 <- rank(lymph_crosswalk2, lymph_coder2)
+result_df[6,4] = lymph_cmp_crosswalk2 %>%
+  summarise(pctAg = mean(rank == 1)) %>%
+  pull(pctAg)
+```
+
+## Ties
+
+### USR
+```{r}
+result_df[1,5] = usr_no_crosswalk%>%
+  summarise(pct = mean(score_1-score_2<10^-6)) %>%
+  pull(pct)
+result_df[2,5] = usr_crosswalk%>%
+  summarise(pct = mean(score_1-score_2<10^-6)) %>%
+  pull(pct)
+```
+
+### ATP
+```{r}
+result_df[3,5] = atp_no_crosswalk%>%
+  summarise(pct = mean(score_1-score_2<10^-6)) %>%
+  pull(pct)
+result_df[4,5] = atp_crosswalk%>%
+  summarise(pct = mean(score_1-score_2<10^-6)) %>%
+  pull(pct)
+```
+
+### Lymph
+```{r}
+result_df[5,5] = lymph_no_crosswalk%>%
+  summarise(pct = mean(score_1-score_2<10^-6)) %>%
+  pull(pct)
+result_df[6,5] = lymph_crosswalk%>%
+  summarise(pct = mean(score_1-score_2<10^-6)) %>%
+  pull(pct)
+```
+
+## Medians
+
+### USR
+```{r}
+result_df[1,6] = usr_no_crosswalk%>%
+  summarise(med = median(score_1)) %>%
+  pull(med)
+result_df[2,6] = usr_crosswalk%>%
+  summarise(med = median(score_1)) %>%
+  pull(med)
+```
+
+### ATP
+```{r}
+result_df[3,6] = atp_no_crosswalk%>%
+  summarise(med = median(score_1)) %>%
+  pull(med)
+result_df[4,6] = atp_crosswalk%>%
+  summarise(med = median(score_1)) %>%
+  pull(med)
+```
+
+### Lymph
+```{r}
+result_df[5,6] = lymph_no_crosswalk%>%
+  summarise(med = median(score_1)) %>%
+  pull(med)
+result_df[6,6] = lymph_crosswalk%>%
+  summarise(med = median(score_1)) %>%
+  pull(med)
+```
+
+## IQRs
+
+### USR
+```{r}
+result_df[1,7] = usr_no_crosswalk%>%
+  summarise(q1 = list(quantile(score_1, probs = 0.25))) %>%
+  pull(q1)
+result_df[1,8] = usr_no_crosswalk%>%
+  summarise(q3 = list(quantile(score_1, probs = 0.75))) %>%
+  pull(q3)
+result_df[2,7] = usr_crosswalk%>%
+  summarise(q1 = list(quantile(score_1, probs = 0.25))) %>%
+  pull(q1)
+result_df[2,8] = usr_crosswalk%>%
+  summarise(q3 = list(quantile(score_1, probs = 0.75))) %>%
+  pull(q3)
+```
+
+### ATP
+```{r}
+result_df[3,7] = atp_no_crosswalk%>%
+  summarise(q1 = list(quantile(score_1, probs = 0.25))) %>%
+  pull(q1)
+result_df[3,8] = atp_no_crosswalk%>%
+  summarise(q3 = list(quantile(score_1, probs = 0.75))) %>%
+  pull(q3)
+result_df[4,7] = atp_crosswalk%>%
+  summarise(q1 = list(quantile(score_1, probs = 0.25))) %>%
+  pull(q1)
+result_df[4,8] = atp_crosswalk%>%
+  summarise(q3 = list(quantile(score_1, probs = 0.75))) %>%
+  pull(q3)
+```
+
+### Lymph
+```{r}
+result_df[5,7] = lymph_no_crosswalk%>%
+  summarise(q1 = list(quantile(score_1, probs = 0.25))) %>%
+  pull(q1)
+result_df[5,8] = lymph_no_crosswalk%>%
+  summarise(q3 = list(quantile(score_1, probs = 0.75))) %>%
+  pull(q3)
+result_df[6,7] = lymph_crosswalk%>%
+  summarise(q1 = list(quantile(score_1, probs = 0.25))) %>%
+  pull(q1)
+result_df[6,8] = lymph_crosswalk%>%
+  summarise(q3 = list(quantile(score_1, probs = 0.75))) %>%
+  pull(q3)
+```
+
+```{r}
+colnames(result_df) = c("6dig", "5dig", "3dig", "2dig", "tie", "median_score", "q1", "q3")
+```
+
+
+```{r}
+result_df2 <- result_df %>%
+  mutate(
+    median_score = round(median_score, 2),
+    q1 = round(q1, 2),
+    q3 = round(q3, 2),
+    combined = paste0(median_score, " (", q1, "-", q3, ")")
+  )
+```
+
+```{r}
+result_df = result_df2[, c("2dig", "3dig", "5dig", "6dig", "tie", "combined")]
+```
+
+
+```{r}
+colnames(result_df) = c("2-Digit", "3-Digit", "5-Digit", "6-Digit", "Tie", "Median (IQR)")
+```
+
+# Table
+```{r}
+result_df <- result_df %>%
+  tibble::rownames_to_column("rownames")
+result_df$Group = c("US Renal", "US Renal", "ATP", "ATP", "Asia Lymph", "Asia Lymph")
+```
+
+```{r}
+result_df$rownames= c("Without Crosswalk", "With Crosswalk","Without Crosswalk", "With Crosswalk","Without Crosswalk", "With Crosswalk")
+```
+
+```{r, width = 10, height = 8}
+result_df %>%
+  gt(rowname_col = "rownames", groupname_col = "Group", row_group_as_column = TRUE) %>%
+  fmt_percent(
+    columns = c("6-Digit", "5-Digit", "3-Digit", "2-Digit", "Tie"),
+    decimals = 2  # Round to 2 decimal places
+  ) %>%
+  tab_spanner(
+    label = "Percent agreement by SOC hierarchical levels",
+    columns = c("6-Digit", "5-Digit", "3-Digit", "2-Digit")
+  ) %>%
+  tab_options(
+    table.font.size = "80%",            # Reduce font size to 80% of default
+    data_row.padding = px(3),          # Reduce padding between rows
+    row_group.padding = px(3),         # Reduce padding for row groups
+    table.width = pct(100)             # Ensure the table width stretches to fit
+  )
+```
+
+# Graph
+```{r}
+df_summary <- usr_cmp %>%
+  mutate(
+    interval = cut(hi_score, breaks = seq(0, 1, length.out = 21), include.lowest = TRUE) # Create intervals
+  ) %>%
+  group_by(interval) %>% # Group by interval
+  summarize(usr_no_x = mean(rank == 1))
+```
+
+```{r}
+df_summary$usr_x <- usr_cmp_crosswalk %>%
+  mutate(
+    interval = cut(hi_score, breaks = seq(0, 1, length.out = 21), include.lowest = TRUE) # Create intervals
+  ) %>%
+  group_by(interval) %>% # Group by interval
+  summarize(usr_x = mean(rank == 1))%>%
+  pull(usr_x)
+```
+
+```{r}
+df_summary$atp_no_x <- atp_cmp %>%
+  mutate(
+    interval = cut(hi_score, breaks = seq(0, 1, length.out = 21), include.lowest = TRUE) # Create intervals
+  ) %>%
+  group_by(interval) %>% # Group by interval
+  summarize(atp_no_x = mean(rank == 1))%>%
+  pull(atp_no_x)
+```
+
+```{r}
+df_summary$atp_x <- atp_cmp_crosswalk %>%
+  mutate(
+    interval = cut(hi_score, breaks = seq(0, 1, length.out = 21), include.lowest = TRUE) # Create intervals
+  ) %>%
+  group_by(interval) %>% # Group by interval
+  summarize(atp_x = mean(rank == 1))%>%
+  pull(atp_x)
+```
+
+```{r}
+df_summary$lymph_no_x <- lymph_cmp %>%
+  mutate(
+    interval = cut(hi_score, breaks = seq(0, 1, length.out = 21), include.lowest = TRUE) # Create intervals
+  ) %>%
+  group_by(interval) %>% # Group by interval
+  summarize(lymph_no_x = mean(rank == 1))%>%
+  pull(lymph_no_x)
+```
+
+```{r}
+df_summary$lymph_x <-lymph_cmp_crosswalk %>%
+  mutate(
+    interval = cut(hi_score, breaks = seq(0, 1, length.out = 21), include.lowest = TRUE) # Create intervals
+  ) %>%
+  group_by(interval) %>% # Group by interval
+  summarize(lymph_x = mean(rank == 1))%>%
+  pull(lymph_x)
+```
+
+```{r}
+df_summary$usr_no_x_2 <-usr_cmp_soc2 %>%
+  mutate(
+    interval = cut(hi_score, breaks = seq(0, 1, length.out = 21), include.lowest = TRUE) # Create intervals
+  ) %>%
+  group_by(interval) %>% # Group by interval
+  summarize(usr_no_x_2 = mean(rank == 1))%>%
+  pull(usr_no_x_2)
+```
+
+```{r}
+df_summary$atp_no_x_2 <-atp_cmp_soc2 %>%
+  mutate(
+    interval = cut(hi_score, breaks = seq(0, 1, length.out = 21), include.lowest = TRUE) # Create intervals
+  ) %>%
+  group_by(interval) %>% # Group by interval
+  summarize(atp_no_x_2 = mean(rank == 1))%>%
+  pull(atp_no_x_2)
+```
+
+```{r}
+df_summary$lymph_no_x_2 <-lymph_cmp_soc2 %>%
+  mutate(
+    interval = cut(hi_score, breaks = seq(0, 1, length.out = 21), include.lowest = TRUE) # Create intervals
+  ) %>%
+  group_by(interval) %>% # Group by interval
+  summarize(lymph_no_x_2 = mean(rank == 1))%>%
+  pull(lymph_no_x_2)
+```
+
+```{r}
+df_summary1 = df_summary
+df_summary1$start_value = df_summary1%>%
+  mutate(start_value = as.numeric(sub("\\((.+),.+\\]", "\\1", as.character(interval))))%>%
+  pull(start_value)
+df_summary1$start_value[1]=0
+```
+
+
+```{r}
+ggplot(df_summary1)+
+  geom_point(aes(x = start_value, y = usr_no_x), shape = 1)+
+  geom_point(aes(x = start_value, y = usr_x), shape = 19)+
+  geom_point(aes(x = start_value, y = atp_no_x), shape = 2)+
+  geom_point(aes(x = start_value, y = atp_x), shape = 17)+
+  geom_point(aes(x = start_value, y = lymph_no_x), shape = 0)+
+  geom_point(aes(x = start_value, y = lymph_x), shape = 15)+
+  scale_x_continuous(
+    name = "Interval Start", 
+    breaks = seq(0,1, by = .05)
+  ) 
+```
+```{r}
+df_long <- df_summary[, 1:7] %>%
+  pivot_longer(
+    cols = -c(interval),               # Columns to pivot (all except 'interval')
+    names_to = "group",             # New column for variable names
+    values_to = "value"             # New column for values
+  ) %>%
+  mutate(
+    facet_group = case_when(        # Create a grouping variable for faceting
+      grepl("usr", group) ~ "USR",
+      grepl("atp", group) ~ "ATP",
+      grepl("lymph", group) ~ "Asia Lymph"
+    ),
+    shape = case_when(              # Assign shapes based on suffix
+      grepl("_no_x$", group) ~ 17,  # Triangle shape for groups ending in '_no_x'
+      grepl("_x$", group) ~ 19      # Circle shape for groups ending in '_x'
+    ),
+    start_value = as.numeric(sub("\\((.+),.+\\]", "\\1", as.character(interval))))
+
+df_long$start_value[1:6] = 0
+
+# Plot with faceting
+ggplot(df_long, aes(x = start_value, y = value, shape = factor(shape))) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", aes(linetype = factor(shape)), se= FALSE)+
+  facet_wrap(~facet_group, scales = "free_y") +  # Create separate subplots
+  scale_shape_manual(values = c(17, 19), labels = c("Without Crosswalk", "With Crosswalk")) + # Map shapes+
+  scale_linetype_manual(values = c(17, 19), labels = c("Without Crosswalk", "With Crosswalk"))+
+  scale_x_continuous(
+    name = "Soccer Score (In Intervals)", 
+    breaks = seq(0,1, by = .10)
+  ) +
+  scale_y_continuous(0, 1, breaks = seq(0,1, by = .10), name = "Percent Agreement")+
+  labs(
+    shape = "Group Type",
+    linetype = "Group Type"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5)) # Rotate x-axis labels for readability
+```
+```{r}
+df_summary$center = df_summary %>%
+  mutate(
+    # Extract start and end of intervals using regex
+    start = as.numeric(sub("\\(([^,]+),.*", "\\1", as.character(interval))),  # Extract start
+    center = start +.025
+  )%>%
+  pull(center)
+df_summary$center[1]= .025
+```
+
+
+```{r}
+df_summary_nox = df_summary[, c(11, 2,4,6, 8, 9, 10)] 
+```
+
+```{r}
+df_summary_x = df_summary[,c(11, 3,5,7)]
+```
+
+```{r}
+df_long_nox = df_summary_nox %>%
+  pivot_longer(
+    cols = -center,                 # Columns to pivot (all except 'center')
+    names_to = "group",             # New column for variable names
+    values_to = "value"             # New column for values
+  ) %>%
+  mutate(
+    facet_group = case_when(        # Create a grouping variable for faceting
+      grepl("usr_no_x", group) ~ "USR",
+      grepl("atp_no_x", group) ~ "ATP",
+      grepl("lymph", group) ~ "Asia Lymph"
+    )) %>%
+  mutate(
+    facet_shape = case_when(
+      grepl("no_x_2", group) ~ "Soccer 2.0",
+      grepl("no_x", group) ~ "Soccer Net",
+    )
+  )
+
+ggplot(df_long_nox, aes(x = center, y = value, color = facet_group, shape = facet_shape)) +
+  geom_point() +
+  geom_smooth(aes(linetype = facet_shape), method = "lm", se = FALSE) +
+  labs(
+    x = "Highest Model Score",
+    y = "Percent Agreement",
+    color = "Study",
+    shape = "Model Type",
+    linetype = "Model Type",
+    title = "Score vs. Agreement without Crosswalk"
+  ) +
+  ylim(0, 1)  # Correct syntax for setting y-axis limits
+
+```
+
+```{r}
+df_long_x = df_summary_x %>%
+  pivot_longer(
+    cols = -center,                 # Columns to pivot (all except 'center')
+    names_to = "group",             # New column for variable names
+    values_to = "value"             # New column for values
+  ) %>%
+  mutate(
+    facet_group = case_when(        # Create a grouping variable for faceting
+      grepl("usr", group) ~ "USR",
+      grepl("atp", group) ~ "ATP",
+      grepl("lymph", group) ~ "Asia Lymph"
+    )
+  )
+
+ggplot(df_long_x, aes(x = center, y = value, color = facet_group)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    x = "Highest Model Score",
+    y = "Percent Agreement",
+    color = "Study",
+    title = "Score vs. Agreement with Crosswalk"
+  ) +
+  ylim(0, 1)  # Correct syntax for setting y-axis limits
+
+```
+
+```{r}
+ranks_df = data.frame(1,2,3,4,5,6,7,8,9,10,11)
+```
+
+```{r}
+ranks_df[1,] <- usr_cmp %>%
+  summarize(
+    !!!setNames(
+      lapply(1:max(.$rank, na.rm = TRUE), function(i) mean(.$rank <= i, na.rm = TRUE)),
+      paste0("pct_", 1:max(.$rank, na.rm = TRUE))
+    )
+  )
+```
+
+```{r}
+ranks_df[2,] <- usr_cmp_crosswalk %>%
+  summarize(
+    !!!setNames(
+      lapply(1:max(.$rank, na.rm = TRUE), function(i) mean(.$rank <= i, na.rm = TRUE)),
+      paste0("pct_", 1:max(.$rank, na.rm = TRUE))
+    )
+  )
+```
+
+```{r}
+ranks_df[3,] <- atp_cmp %>%
+  summarize(
+    !!!setNames(
+      lapply(1:max(.$rank, na.rm = TRUE), function(i) mean(.$rank <= i, na.rm = TRUE)),
+      paste0("pct_", 1:max(.$rank, na.rm = TRUE))
+    )
+  )
+```
+
+```{r}
+ranks_df[4,] <- atp_cmp_crosswalk %>%
+  summarize(
+    !!!setNames(
+      lapply(1:max(.$rank, na.rm = TRUE), function(i) mean(.$rank <= i, na.rm = TRUE)),
+      paste0("pct_", 1:max(.$rank, na.rm = TRUE))
+    )
+  )
+```
+
+```{r}
+ranks_df[5,] <- lymph_cmp %>%
+  summarize(
+    !!!setNames(
+      lapply(1:max(.$rank, na.rm = TRUE), function(i) mean(.$rank <= i, na.rm = TRUE)),
+      paste0("pct_", 1:max(.$rank, na.rm = TRUE))
+    )
+  )
+```
+
+```{r}
+ranks_df[6,] <- lymph_cmp_crosswalk %>%
+  summarize(
+    !!!setNames(
+      lapply(1:max(.$rank, na.rm = TRUE), function(i) mean(.$rank <= i, na.rm = TRUE)),
+      paste0("pct_", 1:max(.$rank, na.rm = TRUE))
+    )
+  )
+```
+
+```{r}
+rownames(ranks_df) = c("USR without Crosswalk", "USR with Crosswalk", "ATP without Crosswalk", "ATP with Crosswalk", "Asia Lymph without Crosswalk", "Asia Lymph with Crosswalk")
+```
+
+```{r}
+ranks_df <- ranks_df %>%
+  rownames_to_column(var = "study") # "study" will hold the old row names
+
+long_df <- ranks_df %>%
+  pivot_longer(
+    cols = starts_with("X"),     # Select percentage columns
+    names_to = "pct_rank",          # New column for the rank
+    values_to = "cumulative_pct"    # New column for the cumulative percentage
+  ) %>%
+  mutate(
+    pct_rank = as.numeric(gsub("X", "", pct_rank)) # Convert rank names to numeric
+  )
+```
+
+```{r}
+ggplot(long_df, aes(x = pct_rank, y = cumulative_pct, color = study, group = study)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(
+    x = "Rank of expert SOC",
+    y = "Cumulative proportion of jobs",
+    title = "Cumulative Percentages by Rank",
+    color = "Study"
+  ) +
+  scale_x_continuous(breaks = 1:11) +
+  scale_y_continuous(limits = c(0,1))+
+  theme_minimal()
+```
+# Inputting Crosswalk Files and Creating Num_Crosswalk Columns
+## Asia Lymph
+```{r}
+xwalk_lymph = read.csv('/Users/orszagl2/Documents/socR/crosswalk files/isco1988_soc2010.csv')
+xwalk_lymph = xwalk(xwalk_lymph)
+```
+
+```{r}
+lymph_crosswalk_tibble = as.tibble(lymph_crosswalk)
+lymph_crosswalk_tibble = lymph_crosswalk_tibble %>% crosswalk_columns(xwalk_lymph, num_crosswalk, isco1988, unnest_results = TRUE)
+lymph_crosswalk_num = as.data.frame(lymph_crosswalk_tibble)
+lymph_crosswalk_num <- lymph_crosswalk_num %>%
+  rowwise() %>%
+  mutate(num_crosswalk_count = sum(!is.na(c_across(starts_with("num_crosswalk"))))) %>%
+  ungroup()
+```
+
+### Combining Old and New Dataframes to Have Scores in 1 Dataframe
+```{r}
+lymph_full = inner_join(lymph_crosswalk_num, lymph_no_crosswalk, by = "Id")
+```
+
+### Graph
+```{r}
+ggplot(lymph_full, aes(y = score_1.x, x = score_1.y))+
+  geom_point(aes(color = num_crosswalk_count))+
+  labs(y = "Score with Crosswalk",
+       x = "Score without Crosswalk",
+       title = "Score with vs. without Crosswalk (Asia Lymph)",
+       color = "# of Possible SOC Scores")
+```
+
+```{r}
+ggplot(lymph_full)+
+  geom_histogram(aes(x = num_crosswalk_count), binwidth = 1)+
+  labs (x = "Number of Possible SOC Codes",
+        y = "Count",
+        title = "Histogram of # Of Possible SOC Codes \n from Original ISCO 1988 Codes (Asia Lymph)")
+```
+```{r}
+lymph_full_grouped <- lymph_full %>%
+  mutate(score_bins_xw = cut(
+    score_1.x,
+    breaks = seq(0, 1.00, by = 0.05),  # Breaks every 0.05, extending beyond 1
+    include.lowest = TRUE,
+    labels = paste0(
+      seq(0, 0.95, by = 0.05),
+      "-",
+      seq(0.05, 1, by = 0.05)
+    ))) %>%
+    mutate(score_bins_no_xw = cut(
+    score_1.y,
+    breaks = seq(0, 1.00, by = 0.05),  # Breaks every 0.05, extending beyond 1
+    include.lowest = TRUE,
+    labels = paste0(
+      seq(0, 0.95, by = 0.05),
+      "-",
+      seq(0.05, 1, by = 0.05)
+    ))
+  )
+```
+
+```{r}
+ggplot(lymph_full_grouped)+
+  geom_boxplot(aes(x = score_bins_xw, y = num_crosswalk_count))+
+  labs (x = "Score, Grouped (With Crosswalk)",
+        y = "Number of SOC Scores",
+        title = "Number of SOC Scores Possible from ISCO Score \n per Score Range (Asia Lymph)")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+```{r}
+# this graph looks at the number of possible soc scores from the crosswalk and compares it to the corresponding NON-crosswalked score
+ggplot(lymph_full_grouped)+
+  geom_boxplot(aes(x = score_bins_no_xw, y = num_crosswalk_count))+
+  labs (x = "Score, Grouped (Without Crosswalk)",
+        y = "Number of SOC Scores",
+        title = "Number of SOC Scores Possible from ISCO Score \n per Score Range (Asia Lymph)")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+## ATP
+```{r}
+xwalk_atp = read.csv('/Users/orszagl2/Documents/socR/crosswalk files/noc2011_soc2010_via_soc2018.csv')
+xwalk_atp = xwalk(xwalk_atp)
+```
+
+```{r}
+atp_crosswalk_tibble = as.tibble(atp_crosswalk)
+atp_crosswalk_tibble = atp_crosswalk_tibble %>% crosswalk_columns(xwalk_atp, num_crosswalk, noc2011, unnest_results = TRUE)
+atp_crosswalk_num = as.data.frame(atp_crosswalk_tibble)
+atp_crosswalk_num <- atp_crosswalk_num %>%
+  rowwise() %>%
+  mutate(num_crosswalk_count = sum(!is.na(c_across(starts_with("num_crosswalk"))))) %>%
+  ungroup()
+```
+
+### Combining Old and New Dataframes to Have Scores in 1 Dataframe
+```{r}
+atp_full = inner_join(atp_crosswalk_num, atp_no_crosswalk, by = "Id")
+```
+
+### Graph
+```{r}
+ggplot(atp_full, aes(y = score_1.x, x = score_1.y))+
+  geom_point(aes(color = num_crosswalk_count))+
+  labs(y = "Score with Crosswalk",
+       x = "Score without Crosswalk",
+       title = "Score with vs. without Crosswalk (ATP)",
+       color = "# of Possible SOC Scores")
+```
+
+```{r}
+ggplot(atp_full)+
+  geom_histogram(aes(x = num_crosswalk_count), binwidth = 1)+
+  labs (x = "Number of Possible SOC Codes",
+        y = "Count",
+        title = "Histogram of # Of Possible SOC Codes \nfrom original NOC Code (ATP)")
+```
+
+```{r}
+atp_full_grouped <- atp_full %>%
+  mutate(score_bins_xw = cut(
+    score_1.x,
+    breaks = seq(0, 1.00, by = 0.05),  # Breaks every 0.05, extending beyond 1
+    include.lowest = TRUE,
+    labels = paste0(
+      seq(0, 0.95, by = 0.05),
+      "-",
+      seq(0.05, 1, by = 0.05)
+    ))) %>%
+    mutate(score_bins_no_xw = cut(
+    score_1.y,
+    breaks = seq(0, 1.00, by = 0.05),  # Breaks every 0.05, extending beyond 1
+    include.lowest = TRUE,
+    labels = paste0(
+      seq(0, 0.95, by = 0.05),
+      "-",
+      seq(0.05, 1, by = 0.05)
+    ))
+  )
+```
+
+```{r}
+ggplot(atp_full_grouped)+
+  geom_boxplot(aes(x = score_bins_xw, y = num_crosswalk_count))+
+  labs (x = "Score, Grouped (With Crosswalk)",
+        y = "Number of SOC Scores",
+        title = "Number of Possible SOC Scores from NOC Code \nper Score Range (ATP)")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+```{r}
+ggplot(atp_full_grouped)+
+  geom_boxplot(aes(x = score_bins_no_xw, y = num_crosswalk_count))+
+  labs (x = "Score, Grouped (Without Crosswalk)",
+        y = "Number of SOC Scores",
+        title = "Number of Possible SOC Scores from NOC Code \nper Score Range (ATP)")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+## USR
+```{r}
+xwalk_usr = read.csv('/Users/orszagl2/Documents/socR/crosswalk files/soc1980_soc2010.csv')
+xwalk_usr = xwalk(xwalk_usr)
+```
+
+```{r}
+usr_crosswalk_tibble = as.tibble(usr_crosswalk)
+usr_crosswalk_tibble = usr_crosswalk_tibble %>% crosswalk_columns(xwalk_usr, num_crosswalk, soc1980, unnest_results = TRUE)
+usr_crosswalk_num = as.data.frame(usr_crosswalk_tibble)
+usr_crosswalk_num <- usr_crosswalk_num %>%
+  rowwise() %>%
+  mutate(num_crosswalk_count = sum(!is.na(c_across(starts_with("num_crosswalk"))))) %>%
+  ungroup()
+```
+
+### Combining Old and New Dataframes to Have Scores in 1 Dataframe
+```{r}
+usr_full = inner_join(usr_crosswalk_num, usr_no_crosswalk, by = "Id")
+```
+
+### Graph
+```{r}
+ggplot(usr_full, aes(y = score_1.x, x = score_1.y))+
+  geom_point(aes(color = num_crosswalk_count))+
+  labs(y = "Score with Crosswalk",
+       x = "Score without Crosswalk",
+       title = "Score with vs. without Crosswalk (USR)",
+       color = "# of Possible SOC Scores")
+```
+
+```{r}
+ggplot(usr_full)+
+  geom_histogram(aes(x = num_crosswalk_count), binwidth = 1)+
+  labs (x = "Number of Possible SOC Codes",
+        y = "Count",
+        title = "Histogram of # Of Possible SOC Codes from \n1980 SOC Code (USR)")
+```
+
+```{r}
+usr_full_grouped <- usr_full %>%
+  mutate(score_bins_xw = cut(
+    score_1.x,
+    breaks = seq(0, 1.00, by = 0.05),  # Breaks every 0.05, extending beyond 1
+    include.lowest = TRUE,
+    labels = paste0(
+      seq(0, 0.95, by = 0.05),
+      "-",
+      seq(0.05, 1, by = 0.05)
+    ))) %>%
+    mutate(score_bins_no_xw = cut(
+    score_1.y,
+    breaks = seq(0, 1.00, by = 0.05),  # Breaks every 0.05, extending beyond 1
+    include.lowest = TRUE,
+    labels = paste0(
+      seq(0, 0.95, by = 0.05),
+      "-",
+      seq(0.05, 1, by = 0.05)
+    ))
+  )
+```
+
+```{r}
+ggplot(usr_full_grouped)+
+  geom_boxplot(aes(x = score_bins_xw, y = num_crosswalk_count))+
+  labs (x = "Score, Grouped (With Crosswalk)",
+        y = "Number of SOC Scores",
+        title = "Number of Possible SOC Scores from SOC 1980 Code \nper Score Range (USR)")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+```{r}
+ggplot(usr_full_grouped)+
+  geom_boxplot(aes(x = score_bins_no_xw, y = num_crosswalk_count))+
+  labs (x = "Score, Grouped (Without Crosswalk)",
+        y = "Number of SOC Scores",
+        title = "Number of Possible SOC Scores from SOC 1980 Code \nper Score Range (USR)")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+# Percent of Jobs Where Expert Code was Chosen
+## Lymph
+```{r}
+lymph_cmp%>%
+  mutate(is_present = map2_lgl(soc2010_coder, soc2010_soccer, ~ any(.x %in% .y)))%>%
+  summarize(mean(is_present))
+
+lymph_cmp_crosswalk%>%
+  mutate(is_present = map2_lgl(soc2010_coder, soc2010_soccer, ~any(.x %in% .y)))%>%
+  summarize(mean(is_present))
+```
+## ATP
+```{r}
+atp_cmp%>%
+  mutate(is_present = map2_lgl(soc2010_coder, soc2010_soccer, ~any(.x %in% .y)))%>%
+  summarize(mean(is_present))
+
+atp_cmp_crosswalk%>%
+  mutate(is_present = map2_lgl(soc2010_coder, soc2010_soccer, ~any(.x %in% .y)))%>%
+  summarize(mean(is_present))
+```
+## USR
+```{r}
+usr_cmp%>%
+  mutate(is_present = map2_lgl(soc2010_coder, soc2010_soccer, ~any(.x %in% .y)))%>%
+  summarize(mean(is_present))
+
+usr_cmp_crosswalk%>%
+  mutate(is_present = map2_lgl(soc2010_coder, soc2010_soccer, ~any(.x %in% .y)))%>%
+  summarize(mean(is_present))
+```
+
+## Create Table
+```{r}
+percent_df = data.frame (row.names = c("Asia Lymph", "ATP", "USR"))
+```
+
+```{r}
+percent_df[1, 1] = .786
+percent_df[1, 2] = .810
+percent_df[2, 1] = .919
+percent_df[2, 2] = .930
+percent_df[3, 1] = .882
+percent_df[3, 2] = .927
+colnames(percent_df) = c("Without Crosswalk", "With Crosswalk")
+```
+
+```{r}
+kable(percent_df, caption = "Percent of Cases for Which Expert Code is Included in SOC Output")
+```
+
+# Difference in Xwalk vs. Non Xwalk Scores
+## 
+```{r}
+usr_full$score_diff = usr_full$score_1.x - usr_full$score_1.y
+atp_full$score_diff = atp_full$score_1.x - atp_full$score_1.y
+lymph_full$score_diff = lymph_full$score_1.x - lymph_full$score_1.y
+```
+
+```{r}
+ggplot(usr_full)+
+  geom_histogram(aes(x = score_diff), binwidth = .05)+
+  labs( y = "Count",
+        x = "Score Difference \n (Crosswalk Score 1 - No Crosswalk Score 1)",
+        title = "USR Score Differences")+
+  scale_x_continuous(n.breaks = 10)+
+  theme_minimal()
+```
+```{r}
+ggplot(atp_full)+
+  geom_histogram(aes(x = score_diff), binwidth = .05)+
+  labs( y = "Count",
+        x = "Score Difference \n (Crosswalk Score 1 - No Crosswalk Score 1)",
+        title = "ATP Score Differences")+
+  scale_x_continuous(n.breaks = 10)+
+  theme_minimal()
+```
+```{r}
+ggplot(lymph_full)+
+  geom_histogram(aes(x = score_diff), binwidth = .05)+
+  labs( y = "Count",
+        x = "Score Difference \n (Crosswalk Score 1 - No Crosswalk Score 1)",
+        title = "Asia Lymph Score Differences")+
+  scale_x_continuous(n.breaks = 10)+
+  theme_minimal()
+```
+
+# 1 to 1 Agreement Graphs
+## USR
+### Data
+```{r}
+usr_cmp$source = rep("No Crosswalk", 11943)
+usr_cmp_crosswalk$source = rep("Crosswalk", 11943)
+usr_agreement = rbind(usr_cmp, select(usr_cmp_crosswalk, -soc1980))
+usr_agreement$agree = ifelse(usr_agreement$rank == 1, "Agree", "Disagree")
+```
+
+### Graphs
+```{r}
+ggplot(usr_agreement, aes(x = hi_score))+
+  geom_histogram(binwidth = .05, fill = "cornflowerblue")+
+  facet_wrap(agree ~ source)+
+  labs (x = "Highest Soccer Score",
+        y = "Count",
+        title = "USR Soccer Scores, by Crosswalk & Agreement with Expert Codes")
+```
+## ATP
+### Data
+```{r}
+atp_cmp$source = rep("No Crosswalk", 446)
+atp_cmp_crosswalk$source = rep("Crosswalk", 446)
+colnames(atp_cmp)[4] = "noc2011"
+atp_agreement = rbind(atp_cmp, atp_cmp_crosswalk)
+atp_agreement$agree = ifelse(atp_agreement$rank == 1, "Agree", "Disagree")
+```
+
+### Graphs
+```{r}
+ggplot(atp_agreement, aes(x = hi_score))+
+  geom_histogram(binwidth = .05, fill = "purple4")+
+  facet_wrap(agree ~ source)+
+  labs (x = "Highest Soccer Score",
+        y = "Count",
+        title = "ATP Soccer Scores, by Crosswalk & Agreement with Expert Codes")
+```
+## Lymph
+### Data
+```{r}
+lymph_cmp$source = rep("No Crosswalk", 1496)
+lymph_cmp_crosswalk$source = rep("Crosswalk", 1496)
+colnames(lymph_cmp)[4] = "isco1988"
+lymph_agreement = rbind(lymph_cmp, lymph_cmp_crosswalk)
+lymph_agreement$agree = ifelse(lymph_agreement$rank == 1, "Agree", "Disagree")
+```
+
+### Graphs
+```{r}
+ggplot(lymph_agreement, aes(x = hi_score))+
+  geom_histogram(binwidth = .05, fill = "turquoise4")+
+  facet_wrap(agree ~ source)+
+  labs (x = "Highest Soccer Score",
+        y = "Count",
+        title = "Asia Lymph Soccer Scores, by Crosswalk & Agreement with Expert Codes")
+```
+
+## USR
+```{r}
+usr_full_new = inner_join(usr_cmp_crosswalk, usr_no_crosswalk, by = "Id")
+usr_full_new$score_diff = usr_full_new$hi_score - usr_full_new$score_1
+```
+
+```{r}
+usr_full_new <- usr_full_new %>%
+  mutate(score_bin_diff = factor(case_when(
+    score_diff > 0.2  ~ "++",
+    score_diff > 0.05 & score_diff <= 0.2  ~ "+",
+    score_diff > -0.05 & score_diff <= 0.05  ~ "No change",
+    score_diff > -0.2 & score_diff <= -0.05 ~ "-",
+    TRUE ~ "--"
+  ), levels = c("--", "-", "No change", "+", "++")))
+```
+
+```{r}
+usr_summary <- usr_full_new %>%
+  mutate(
+    interval = cut(hi_score, breaks = seq(0, 1, length.out = 21), include.lowest = TRUE) # Create intervals
+  ) %>%
+  group_by(interval, score_bin_diff) %>% # Group by interval
+  summarize(usr = mean(rank == 1))
+```
+
+```{r}
+supp.labs = c(
+  "Change greater than -.20",
+  "Change between -.20 and -.05",
+  "Change between -.05 and .05",
+  "Change between .05 and .20",
+  "Change greater than .20"
+)
+names(supp.labs) = c("--", "-", "No change", "+", "++")
+```
+
+```{r}
+ggplot(usr_summary, aes(x = interval, y = usr))+
+  geom_point()+
+  facet_wrap(~score_bin_diff, labeller = labeller(score_bin_diff = supp.labs))+
+  geom_smooth(aes(group = score_bin_diff), method = 'lm', color = "cornflowerblue", se = FALSE)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5))+
+  labs (x = "Highest Soccer Score with Crosswalk", 
+        y = "Percent Agreement with Expert Code",
+        title = "USR Highest Soccer Score vs. Pct Agreement, Stratified by Score Change")
+```
+
+## ATP
+```{r}
+atp_full_new = inner_join(atp_cmp_crosswalk, atp_no_crosswalk, by = "Id")
+atp_full_new$score_diff = atp_full_new$hi_score - atp_full_new$score_1
+```
+
+```{r}
+atp_full_new <- atp_full_new %>%
+  mutate(score_bin_diff = factor(case_when(
+    score_diff > 0.2  ~ "++",
+    score_diff > 0.05 & score_diff <= 0.2  ~ "+",
+    score_diff > -0.05 & score_diff <= 0.05  ~ "No change",
+    score_diff > -0.2 & score_diff <= -0.05 ~ "-",
+    TRUE ~ "--"
+  ), levels = c("--", "-", "No change", "+", "++")))
+```
+
+```{r}
+atp_summary <- atp_full_new %>%
+  mutate(
+    interval = cut(hi_score, breaks = seq(0, 1, length.out = 21), include.lowest = TRUE) # Create intervals
+  ) %>%
+  group_by(interval, score_bin_diff) %>% # Group by interval
+  summarize(atp = mean(rank == 1))
+```
+
+```{r}
+ggplot(atp_summary, aes(x = interval, y = atp))+
+  geom_point()+
+  facet_wrap(~score_bin_diff, labeller = labeller(score_bin_diff = supp.labs))+
+  geom_smooth(aes(group = score_bin_diff), method = 'lm', color = "purple3", se = FALSE)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5))+
+  labs (x = "Highest Soccer Score with Crosswalk", 
+        y = "Percent Agreement with Expert Code",
+        title = "ATP Highest Soccer Score vs. Pct Agreement, Stratified by Score Change")
+```
+
+
+## Lymph
+```{r}
+lymph_full_new = inner_join(lymph_cmp_crosswalk, lymph_no_crosswalk, by = "Id")
+lymph_full_new$score_diff = lymph_full_new$hi_score - lymph_full_new$score_1
+```
+
+```{r}
+lymph_full_new <- lymph_full_new %>%
+  mutate(score_bin_diff = factor(case_when(
+    score_diff > 0.2  ~ "++",
+    score_diff > 0.05 & score_diff <= 0.2  ~ "+",
+    score_diff > -0.05 & score_diff <= 0.05  ~ "No change",
+    score_diff > -0.2 & score_diff <= -0.05 ~ "-",
+    TRUE ~ "--"
+  ), levels = c("--", "-", "No change", "+", "++")))
+```
+
+```{r}
+lymph_summary <- lymph_full_new %>%
+  mutate(
+    interval = cut(hi_score, breaks = seq(0, 1, length.out = 21), include.lowest = TRUE) # Create intervals
+  ) %>%
+  group_by(interval, score_bin_diff) %>% # Group by interval
+  summarize(lymph = mean(rank == 1))
+```
+
+```{r}
+ggplot(lymph_summary, aes(x = interval, y = lymph))+
+  geom_point()+
+  facet_wrap(~score_bin_diff, labeller = labeller(score_bin_diff = supp.labs))+
+  geom_smooth(aes(group = score_bin_diff), method = 'lm', color = "turquoise4", se = FALSE)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5))+
+  labs (x = "Highest Soccer Score with Crosswalk", 
+        y = "Percent Agreement with Expert Code",
+        title = "Lymph Highest Soccer Score vs. Pct Agreement, Stratified by Score Change")
+```
