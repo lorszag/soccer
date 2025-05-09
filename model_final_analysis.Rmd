@@ -454,6 +454,59 @@ result_df[6,5] = lymph_crosswalk%>%
   pull(pct)
 ```
 
+# Thresholds
+```{r}
+ties_1 = usr_no_crosswalk%>%
+  summarise(pct_6 = mean(score_1-score_2<10^-6),
+            pct_5 = mean(score_1-score_2<10^-5),
+            pct_4 = mean(score_1-score_2<10^-4),
+            pct_3 = mean(score_1-score_2<10^-3))%>%
+  mutate(study = "usr_no_xw")
+
+ties_2 = usr_crosswalk%>%
+  summarise(pct_6 = mean(score_1-score_2<10^-6),
+            pct_5 = mean(score_1-score_2<10^-5),
+            pct_4 = mean(score_1-score_2<10^-4),
+            pct_3 = mean(score_1-score_2<10^-3))%>%
+  mutate(study = "usr_xw")
+
+ties_3 = lymph_no_crosswalk%>%
+  summarise(pct_6 = mean(score_1-score_2<10^-6),
+            pct_5 = mean(score_1-score_2<10^-5),
+            pct_4 = mean(score_1-score_2<10^-4),
+            pct_3 = mean(score_1-score_2<10^-3))%>%
+  mutate(study = "lymph_no_xw")
+
+ties_4 = lymph_crosswalk%>%
+  summarise(pct_6 = mean(score_1-score_2<10^-6),
+            pct_5 = mean(score_1-score_2<10^-5),
+            pct_4 = mean(score_1-score_2<10^-4),
+            pct_3 = mean(score_1-score_2<10^-3))%>%
+  mutate(study = "lymph_xw")
+
+ties_5 = atp_no_crosswalk%>%
+  summarise(pct_6 = mean(score_1-score_2<10^-6),
+            pct_5 = mean(score_1-score_2<10^-5),
+            pct_4 = mean(score_1-score_2<10^-4),
+            pct_3 = mean(score_1-score_2<10^-3))%>%
+  mutate(study = "atp_no_xw")
+
+ties_6 = atp_crosswalk%>%
+  summarise(pct_6 = mean(score_1-score_2<10^-6),
+            pct_5 = mean(score_1-score_2<10^-5),
+            pct_4 = mean(score_1-score_2<10^-4),
+            pct_3 = mean(score_1-score_2<10^-3))%>%
+  mutate(study = "atp_xw")
+
+ties = rbind(ties_1, ties_2, ties_3, ties_4, ties_5, ties_6)
+ties = ties[,c(5, 1, 2,3,4)]
+ties[] <- lapply(ties, function(x) {
+  if (is.numeric(x)) round(x * 100, 2) else x
+})
+ties %>%kable(col.names = c("Study", "10^-6 Threshold", "10^-5 Threshold", "10^-4 Threshold", "10^-3 Threshold"))
+```
+
+
 ## Medians
 ### USR
 ```{r usr medians, include = FALSE}
@@ -683,3 +736,108 @@ ggplot(long_df, aes(x = pct_rank, y = cumulative_pct, color = study, group = stu
   scale_y_continuous(limits = c(0,1))+
   theme_minimal()
 ```
+
+# Score Changes
+```{r score change dataframes}
+usr_full = usr_cmp_crosswalk%>%
+  select(Id, hi_score)%>%
+  inner_join(select(usr_cmp, c(Id, hi_score)), by = "Id", suffix = c("_xw", "_no_xw"))%>%
+  mutate(diff = hi_score_xw - hi_score_no_xw)
+
+lymph_full = lymph_cmp_crosswalk%>%
+  select(Id, hi_score)%>%
+  inner_join(select(lymph_cmp, c(Id, hi_score)), by = "Id", suffix = c("_xw", "_no_xw"))%>%
+  mutate(diff = hi_score_xw - hi_score_no_xw)
+
+atp_full = atp_cmp_crosswalk%>%
+  select(Id, hi_score)%>%
+  inner_join(select(atp_cmp, c(Id, hi_score)), by = "Id", suffix = c("_xw", "_no_xw"))%>%
+  mutate(diff = hi_score_xw - hi_score_no_xw)
+```
+
+```{r histograms}
+ggplot(usr_full, aes(x = diff))+
+  geom_histogram(binwidth = .05, fill = "cornflowerblue")+
+  xlim(-1, 1)+
+  labs(x = "Score 1 Difference (Crosswalk - No Crosswalk)",
+       title = "USR Score Differences with & Without Crosswalk")+
+  theme_minimal()
+
+ggplot(atp_full, aes(x = diff))+
+  geom_histogram(binwidth = .05, fill = "pink2")+
+  xlim(-1, 1)+
+  labs(x = "Score 1 Difference (Crosswalk - No Crosswalk)",
+       title = "ATP Score Differences with & Without Crosswalk")+
+  theme_minimal()
+
+ggplot(lymph_full, aes(x = diff))+
+  geom_histogram(binwidth = .05, fill = "green4")+
+  xlim(-1, 1)+
+  labs(x = "Score 1 Difference (Crosswalk - No Crosswalk)",
+       title = "Asia Lymph Score Differences with & Without Crosswalk")+
+  theme_minimal()
+```
+```{r scatter plots with and without crosswalk}
+ggplot(usr_full, aes(x = hi_score_no_xw, y = hi_score_xw))+
+  geom_point()+
+  xlim(0, 1)+
+  labs(x = "Score 1 Without Crosswalk",
+       y = "Score 1 With Crosswalk",
+       title = "USR Scores with/without Crosswalk")+
+  theme_minimal()
+
+ggplot(lymph_full, aes(x = hi_score_no_xw, y = hi_score_xw))+
+  geom_point()+
+  xlim(0, 1)+
+  labs(x = "Score 1 Without Crosswalk",
+       y = "Score 1 With Crosswalk",
+       title = "Asia Lymph Scores with/without Crosswalk")+
+  theme_minimal()
+
+ggplot(atp_full, aes(x = hi_score_no_xw, y = hi_score_xw))+
+  geom_point()+
+  xlim(0, 1)+
+  labs(x = "Score 1 Without Crosswalk",
+       y = "Score 1 With Crosswalk",
+       title = "ATP Scores with/without Crosswalk")+
+  theme_minimal()
+```
+# Rank == 1 Comparison
+```{r ranked dataframes}
+usr_rank = usr_cmp_crosswalk%>%
+  select(Id, rank)%>%
+  inner_join(select(usr_cmp, c(Id, rank)), by = "Id", suffix = c("_xw", "_no_xw"))%>%
+  mutate(match_noxw = ifelse(rank_no_xw == 1, 1, 0),
+         match_xw = ifelse(rank_xw == 1, 1, 0))
+
+atp_rank = atp_cmp_crosswalk%>%
+  select(Id, rank)%>%
+  inner_join(select(atp_cmp, c(Id, rank)), by = "Id", suffix = c("_xw", "_no_xw"))%>%
+  mutate(match_noxw = ifelse(rank_no_xw == 1, 1, 0),
+         match_xw = ifelse(rank_xw == 1, 1, 0))
+
+lymph_rank = lymph_cmp_crosswalk%>%
+  select(Id, rank)%>%
+  inner_join(select(lymph_cmp, c(Id, rank)), by = "Id", suffix = c("_xw", "_no_xw"))%>%
+  mutate(match_noxw = ifelse(rank_no_xw == 1, 1, 0),
+         match_xw = ifelse(rank_xw == 1, 1, 0))
+```
+
+```{r}
+usr_rank%>%tbl_cross(row = match_noxw, col = match_xw)%>% modify_caption("USR Agreement with & without XW")
+atp_rank%>%tbl_cross(row = match_noxw, col = match_xw)%>% modify_caption("ATP Agreement with & without XW")
+lymph_rank%>%tbl_cross(row = match_noxw, col = match_xw)%>% modify_caption("Asia Lymph Agreement with & without XW")
+```
+
+```{r}
+kappa2(usr_rank[, 4:5])
+kappa2(atp_rank[, 4:5])
+kappa2(lymph_rank[, 4:5])
+```
+
+```{r}
+cor.test(usr_full$hi_score_no_xw, usr_full$hi_score_xw, method = "spearman")
+cor.test(atp_full$hi_score_no_xw, atp_full$hi_score_xw, method = "spearman")
+cor.test(lymph_full$hi_score_no_xw, lymph_full$hi_score_xw, method = "spearman")
+```
+

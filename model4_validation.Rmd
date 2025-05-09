@@ -36,9 +36,9 @@ atp_no_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model4.0/atp_no_x
 
 ## Crosswalk
 ```{r xwalk datasets, include = FALSE}
-usr_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model3.0/usr_xw.xlsx")
-lymph_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model3.0/lymph_xw.xlsx")
-atp_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model3.0/atp_xw.xlsx")
+usr_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model4.0/usr_xw.xlsx")
+lymph_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model4.0/lymph_xw.xlsx")
+atp_crosswalk <- read_excel("/Users/orszagl2/Documents/socR/model4.0/atp_xw.xlsx")
 ```
 
 # Agreement
@@ -739,3 +739,4 @@ ggplot(lymph_cmp_crosswalk, aes(x = rank, y = hi_score))+
   scale_x_continuous(breaks = c(1:11))+
   theme_minimal()
 ```
+
