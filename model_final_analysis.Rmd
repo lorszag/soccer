@@ -737,6 +737,78 @@ ggplot(long_df, aes(x = pct_rank, y = cumulative_pct, color = study, group = stu
   theme_minimal()
 ```
 
+```{r create rank dataframe}
+all_ranks <- tibble(rank = sort(unique(c(
+  usr_cmp$rank,
+  usr_cmp_crosswalk$rank,
+  atp_cmp$rank,
+  atp_cmp_crosswalk$rank,
+  lymph_cmp$rank,
+  lymph_cmp_crosswalk$rank
+))))
+
+# Step 2: Create full count tables with all ranks
+usr_noxw_r <- all_ranks %>%
+  left_join(usr_cmp %>% count(rank), by = "rank") %>%
+  replace_na(list(n = 0))
+
+usr_xw_r <- all_ranks %>%
+  left_join(usr_cmp_crosswalk %>% count(rank), by = "rank") %>%
+  replace_na(list(n = 0))
+
+atp_noxw_r <- all_ranks %>%
+  left_join(atp_cmp %>% count(rank), by = "rank") %>%
+  replace_na(list(n = 0))
+
+atp_xw_r <- all_ranks %>%
+  left_join(atp_cmp_crosswalk %>% count(rank), by = "rank") %>%
+  replace_na(list(n = 0))
+
+lymph_noxw_r <- all_ranks %>%
+  left_join(lymph_cmp %>% count(rank), by = "rank") %>%
+  replace_na(list(n = 0))
+
+lymph_xw_r <- all_ranks %>%
+  left_join(lymph_cmp_crosswalk %>% count(rank), by = "rank") %>%
+  replace_na(list(n = 0))
+
+# Step 3: Bind into a final dataframe
+rank_num_df <- tibble(
+  rank = all_ranks$rank,
+  usr_noxw = usr_noxw_r$n,
+  usr_xw = usr_xw_r$n,
+  atp_noxw = atp_noxw_r$n,
+  atp_xw = atp_xw_r$n,
+  lymph_noxw = lymph_noxw_r$n,
+  lymph_xw = lymph_xw_r$n
+)
+
+```
+
+```{r}
+ranks_num_long = pivot_longer(rank_num_df, cols = -rank, names_to = "study")
+ranks_num_long = separate_wider_delim(ranks_num_long, cols = study, delim =  "_", names = c("study_name", "XW"))
+ranks_num_long$study_name = gsub("usr", "US Renal", ranks_num_long$study_name)
+ranks_num_long$study_name = gsub("atp", "ATP", ranks_num_long$study_name)
+ranks_num_long$study_name = gsub("lymph", "Asia Lymph", ranks_num_long$study_name)
+ranks_num_long$XW = gsub("noxw", "Without Crosswalk", ranks_num_long$XW)
+ranks_num_long$XW = gsub("xw", "With Crosswalk", ranks_num_long$XW)
+```
+
+```{r}
+ggplot(ranks_num_long, aes(x= rank, y = value))+
+  geom_bar(stat = 'identity')+
+  facet_grid(study_name~XW, scales = "free")+
+  theme_bw()+
+  scale_x_continuous(breaks = c(1:11), labels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11+"))+
+  labs(x = "Rank", y = "Number of Jobs")
+```
+
+```{r}
+ggsave("faceted_rank_bars.png", plot = last_plot(), dpi = 300)
+```
+
+
 # Score Changes
 ```{r score change dataframes}
 usr_full = usr_cmp_crosswalk%>%
