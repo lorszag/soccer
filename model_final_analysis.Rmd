@@ -127,6 +127,10 @@ df_summary1$start_value = replace_na(df_summary1$start_value, 0)
 df_summary2$start_value = replace_na(df_summary2$start_value, 0)
 ```
 
+```{r}
+usr_coder%>%filter(Id == 'usr-00006')
+```
+
 ```{r full summary & graph, warning = FALSE, echo = FALSE}
 df_summary3 = full_join(df_summary2, select(df_summary1, - interval), by = "start_value")
 df_long <- pivot_data_long(df_summary3)
@@ -587,8 +591,18 @@ result_df[6,8] = lymph_crosswalk%>%
   pull(q3)
 ```
 
+## Ns
+```{r}
+result_df[1, 9] = usr_cmp%>%summarize(n())
+result_df[2, 9] = usr_cmp_crosswalk%>%summarize(n())
+result_df[3, 9] = atp_cmp%>%summarize(n())
+result_df[4, 9] = atp_cmp_crosswalk%>%summarize(n())
+result_df[5, 9] = lymph_cmp%>%summarize(n())
+result_df[6, 9] = lymph_cmp_crosswalk%>%summarize(n())
+```
+
 ```{r name columns, include = FALSE}
-colnames(result_df) = c("6dig", "5dig", "3dig", "2dig", "tie", "median_score", "q1", "q3")
+colnames(result_df) = c("6dig", "5dig", "3dig", "2dig", "tie", "median_score", "q1", "q3", "n")
 ```
 
 ```{r rounded table, include = FALSE}
@@ -602,8 +616,8 @@ result_df2 <- result_df %>%
 ```
 
 ```{r reorg table, include = FALSE}
-result_df = result_df2[, c("2dig", "3dig", "5dig", "6dig", "combined")]
-colnames(result_df) = c("2-Digit", "3-Digit", "5-Digit", "6-Digit", "Median (IQR)")
+result_df = result_df2[, c("n", "2dig", "3dig", "5dig", "6dig", "combined")]
+colnames(result_df) = c("n", "2-Digit", "3-Digit", "5-Digit", "6-Digit", "Median (IQR)")
 ```
 
 
